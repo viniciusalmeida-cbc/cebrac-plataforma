@@ -165,7 +165,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <div class="filters">
       <input type="month" id="fMes" onchange="renderRede()">
       <input type="text" id="fBusca" placeholder="Buscar unidade…" oninput="renderRede()">
-      <select id="fRegiao" onchange="renderRede()"><option value="">Todas as regiões</option></select>
+      <select id="fRegiao" onchange="renderRede()"><option value="">Todas as carteiras</option></select>
       <select id="fCluster" onchange="renderRede()"><option value="">Todos os clusters</option></select>
       <span class="cnt" id="redeCnt"></span>
     </div>
@@ -202,7 +202,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <div class="panel-t">Comparar unidades</div>
     <div class="panel-s">Selecione as unidades (clique nos chips) e o indicador. Filtre por região/cluster para comparar unidades de porte semelhante.</div>
     <div class="filters">
-      <select id="cmpRegiao" onchange="renderChips()"><option value="">Todas as regiões</option></select>
+      <select id="cmpRegiao" onchange="renderChips()"><option value="">Todas as carteiras</option></select>
       <select id="cmpCluster" onchange="renderChips()"><option value="">Todos os clusters</option></select>
       <select id="cmpMetric" onchange="renderComparativo()">
         <option value="faturamento">Faturamento</option>
@@ -278,8 +278,8 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 <div class="view" id="view-admin">
   <div class="panel">
     <div class="panel-t">Unidades <span class="cnt" id="admUniCnt"></span></div>
-    <div class="panel-s">Cadastre as 72 unidades — uma por linha no formato: <b>Nome;Região;Cluster</b></div>
-    <textarea id="admUniText" rows="5" style="width:100%" placeholder="Joinville;Sul;150 000 a 300 000 habitantes&#10;Teófilo Otoni;Sudeste;Até 150 000 habitantes"></textarea>
+    <div class="panel-s">Cadastre as unidades — uma por linha no formato: <b>Nome;Carteira;Cluster</b> (Região opcional como 4º campo)</div>
+    <textarea id="admUniText" rows="5" style="width:100%" placeholder="Joinville;PAMELA;150 a 300 mil&#10;Teófilo Otoni;ISABELA;Até 150mil"></textarea>
     <div class="btn-row"><button class="btn" onclick="admSalvarUnidades()">Cadastrar / atualizar unidades</button></div>
     <div class="chips" id="admUniList"></div>
   </div>
@@ -404,11 +404,11 @@ function initUI(){
   if(!$('fMes').value)$('fMes').value=meses.slice(-1)[0]||new Date().toISOString().slice(0,7);
   if(!$('fecMes').value)$('fecMes').value=new Date().toISOString().slice(0,7);
   // filtros de região/cluster
-  const regs=[...new Set(Object.values(state.unidades).map(u=>u.regiao).filter(Boolean))].sort();
+  const regs=[...new Set(Object.values(state.unidades).map(u=>u.carteira).filter(Boolean))].sort();
   const clus=[...new Set(Object.values(state.unidades).map(u=>u.cluster).filter(Boolean))].sort();
   const fill=(id,vals,first)=>{$(id).innerHTML='<option value="">'+first+'</option>'+vals.map(v=>`<option>${v}</option>`).join('')};
-  fill('fRegiao',regs,'Todas as regiões');fill('fCluster',clus,'Todos os clusters');
-  fill('cmpRegiao',regs,'Todas as regiões');fill('cmpCluster',clus,'Todos os clusters');
+  fill('fRegiao',regs,'Todas as carteiras');fill('fCluster',clus,'Todos os clusters');
+  fill('cmpRegiao',regs,'Todas as carteiras');fill('cmpCluster',clus,'Todos os clusters');
   buildDespGrid();
   $('redeLoad').style.display='none'; $('redeContent').style.display='block';
   renderRede(); renderChips(); carregarFechamento();
@@ -452,7 +452,7 @@ function renderRede(){
   for(const uid of Object.keys(state.unidades)){
     const u=state.unidades[uid];
     if(q&&!u.nome.toLowerCase().includes(q))continue;
-    if(fr&&u.regiao!==fr)continue; if(fc&&u.cluster!==fc)continue;
+    if(fr&&u.carteira!==fr)continue; if(fc&&u.cluster!==fc)continue;
     const sc=scoreDe(uid,mes);
     rows.push({uid,u,sc});
   }
@@ -470,10 +470,10 @@ function renderRede(){
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
   $('redeCnt').textContent=rows.length+' unidade(s) · '+com.length+' com fechamento em '+mLbl(mes);
   $('redeBody').innerHTML=rows.map(r=>{
-    if(!r.sc)return`<tr style="opacity:.55"><td><span class="sem" style="background:var(--border)"></span>${r.u.nome}<div class="usub">${[r.u.regiao,r.u.cluster].filter(Boolean).join(' · ')}</div></td><td colspan="8" class="cnt">sem fechamento em ${mLbl(mes)}</td></tr>`;
+    if(!r.sc)return`<tr style="opacity:.55"><td><span class="sem" style="background:var(--border)"></span>${r.u.nome}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td><td colspan="8" class="cnt">sem fechamento em ${mLbl(mes)}</td></tr>`;
     const f=r.sc.f, meta=f.metaMatriculas;
     return`<tr onclick="$('dreUnit').value='${r.uid}';goTab('dre');renderDRE()">
-      <td><span class="sem ${r.sc.sem}"></span><strong>${r.u.nome}</strong><div class="usub">${[r.u.regiao,r.u.cluster].filter(Boolean).join(' · ')}</div></td>
+      <td><span class="sem ${r.sc.sem}"></span><strong>${r.u.nome}</strong><div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td>
       <td><span class="score-pill score-${r.sc.sem}">${r.sc.score}</span></td>
       <td class="num">${brl(f.faturamento)}</td><td class="num">${brl(f.despTotal)}</td>
       <td class="num"><span class="pill ${f.resultado>=0?'up':'dn'}">${brl(f.resultado)}</span></td>
@@ -496,7 +496,7 @@ function renderDRE(){
   if(!uid)return;
   const u=state.unidades[uid];
   const serie=serieDe(uid).filter(f=>f.mes.startsWith(ano));
-  $('dreMeta').textContent=[u.regiao,u.cluster].filter(Boolean).join(' · ');
+  $('dreMeta').textContent=[u.carteira,u.cluster].filter(Boolean).join(' · ');
   if(!serie.length){ $('dreTable').innerHTML='<tbody><tr><td class="empty-state">Sem fechamentos de '+u.nome+' em '+ano+'.</td></tr></tbody>';
     $('dreKpis').innerHTML=''; kill('cDre1');kill('cDre2'); return; }
 
@@ -560,7 +560,7 @@ function renderChips(){
   const fr=$('cmpRegiao').value, fc=$('cmpCluster').value;
   const uids=Object.keys(state.unidades).filter(id=>{
     const u=state.unidades[id];
-    return(!fr||u.regiao===fr)&&(!fc||u.cluster===fc);
+    return(!fr||u.carteira===fr)&&(!fc||u.cluster===fc);
   }).sort((a,b)=>state.unidades[a].nome.localeCompare(state.unidades[b].nome));
   $('cmpChips').innerHTML=uids.map(id=>`<span class="chip ${state.cmpSel.has(id)?'sel':''}" onclick="toggleChip('${id}')">${state.unidades[id].nome}</span>`).join('');
   renderComparativo();
@@ -570,7 +570,7 @@ function selTodosChips(on){
   const fr=$('cmpRegiao').value, fc=$('cmpCluster').value;
   if(!on){state.cmpSel.clear();renderChips();return;}
   Object.keys(state.unidades).forEach(id=>{ const u=state.unidades[id];
-    if((!fr||u.regiao===fr)&&(!fc||u.cluster===fc))state.cmpSel.add(id); });
+    if((!fr||u.carteira===fr)&&(!fc||u.cluster===fc))state.cmpSel.add(id); });
   renderChips();
 }
 const METRIC_LBL={faturamento:'Faturamento',resultado:'Resultado Operacional',lucratividade:'Lucratividade %',
@@ -730,10 +730,10 @@ async function admSalvarUnidades(){
   if(!lines.length){toast('Cole as unidades primeiro.');return;}
   const batch=db.batch(); let n=0;
   for(const l of lines){
-    const[nome,regiao,cluster]=l.split(';').map(s=>(s||'').trim());
+    const[nome,carteira,cluster,regiao]=l.split(';').map(s=>(s||'').trim());
     if(!nome)continue;
     const id=slug(nome);
-    batch.set(db.collection('unidades').doc(id),{nome,regiao:regiao||null,cluster:cluster||null});
+    batch.set(db.collection('unidades').doc(id),{nome,carteira:carteira||null,cluster:cluster||null,regiao:regiao||null});
     n++;
   }
   try{ await batch.commit(); toast(n+' unidade(s) cadastrada(s)/atualizada(s).'); await carregarTudo(); }
