@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -264,13 +265,24 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     </div>
   </div>
   <div class="panel">
-    <div class="panel-t">Importação em massa (histórico ou várias unidades de uma vez)</div>
-    <div class="panel-s">Cole linhas CSV no formato do modelo — uma linha por unidade × mês. Ideal para carregar o histórico inicial.</div>
-    <div class="btn-row" style="margin:0 0 8px">
-      <button class="btn ghost" onclick="baixarModeloCSV()">⬇ Baixar modelo CSV</button>
+    <div class="panel-t">Importar extrações do sistema (recomendado)</div>
+    <div class="panel-s">Solte aqui os arquivos exportados do sistema, do jeito que saem (.csv ou .xlsx). A plataforma reconhece o formato pelo cabeçalho, agrega por unidade × mês e mescla com o que já existe no banco — sem apagar campos já preenchidos.</div>
+    <div class="hint" style="margin-bottom:8px">Formatos reconhecidos: <b>Despesas</b> (unidade, conta, contapai, pagamento, valor) · <b>Movimentação Financeira</b> (Origem, Valor Pago — gera receita e despesas) · <b>Matrículas</b> (Numero Contrato, Data — gera matrículas e ticket) · <b>Contas a Receber</b> (Vencimento, Valor — gera carteira e vencida na data de referência).</div>
+    <div class="filters">
+      <input type="file" id="impFiles" multiple accept=".csv,.xlsx,.xls">
+      <input type="month" id="impRefMes" title="Mês de referência para Carteira (Contas a Receber)">
+      <button class="btn" onclick="analisarArquivos()">1 · Analisar arquivos</button>
     </div>
-    <textarea id="impText" rows="6" style="width:100%" placeholder="Mes,Unidade,Matriculas,MetaMatriculas,Ticket,ReceitaParcelas,ReceitaComercial,CobrancaAtual,Cobranca30,CarteiraTotal,CarteiraVencida,Impostos e Taxas,Ocupação,..."></textarea>
-    <div class="btn-row"><button class="btn" onclick="importarCSV()">Importar linhas</button><span class="cnt" id="impStatus"></span></div>
+    <div id="impPreview"></div>
+    <div class="btn-row" id="impGravarRow" style="display:none">
+      <button class="btn gold" onclick="gravarImportacao()">2 · Gravar no banco</button>
+      <span class="cnt" id="impProg"></span>
+    </div>
+    <details style="margin-top:14px"><summary class="hint" style="cursor:pointer;color:var(--blue);font-weight:600">Importação manual pelo modelo CSV (alternativa)</summary>
+      <div class="btn-row" style="margin:8px 0"><button class="btn ghost" onclick="baixarModeloCSV()">⬇ Baixar modelo CSV</button></div>
+      <textarea id="impText" rows="5" style="width:100%" placeholder="Mes,Unidade,Matriculas,..."></textarea>
+      <div class="btn-row"><button class="btn ghost" onclick="importarCSV()">Importar linhas do modelo</button><span class="cnt" id="impStatus"></span></div>
+    </details>
   </div>
 </div>
 
@@ -710,6 +722,158 @@ async function importarCSV(){
     $('impStatus').textContent=ok+' linha(s) importada(s)'+(skip?(' · '+skip+' ignorada(s) — mês inválido ou unidade não cadastrada'):'');
     toast('Importação concluída: '+ok+' fechamentos.'); initUI();
   }catch(e){toast('Erro na importação: '+e.message);}
+}
+
+/* ================================================================
+   IMPORTADOR DE EXTRAÇÕES BRUTAS
+================================================================ */
+const IMP={docs:{},avisos:[],naoCad:new Set()};
+function normH(h){return String(h).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
+function parseData(v){
+  if(v==null||v==='')return null;
+  if(v instanceof Date)return isNaN(v)?null:v;
+  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?new Date(d.y,d.m-1,d.d):null}
+  const t=String(v).trim();
+  let m=t.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+  m=t.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  return null;
+}
+function mesDe(d){return d?d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'):null}
+function lerArquivo(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onerror=()=>rej(new Error('falha na leitura'));
+    if(/\.(xlsx|xls)$/i.test(file.name)){
+      r.onload=()=>{try{
+        const wb=XLSX.read(r.result,{cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        res(XLSX.utils.sheet_to_json(ws,{defval:null}));
+      }catch(e){rej(e)}};
+      r.readAsArrayBuffer(file);
+    }else{
+      r.onload=()=>{try{
+        let txt=r.result; if(txt.charCodeAt(0)===0xFEFF)txt=txt.slice(1);
+        const lines=txt.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+        const sep=lines[0].split(';').length>lines[0].split(',').length?';':',';
+        const H=csvSplit(lines[0],sep);
+        res(lines.slice(1).map(l=>{const c=csvSplit(l,sep);const o={};H.forEach((h,i)=>o[h]=c[i]??null);return o}));
+      }catch(e){rej(e)}};
+      r.readAsText(file,'utf-8');
+    }
+  });
+}
+function docImp(uid,mes){return IMP.docs[uid+'_'+mes]||(IMP.docs[uid+'_'+mes]={unidadeId:uid,mes})}
+function resolveUid(nome){
+  if(!nome)return null;
+  const id=slug(String(nome).trim());
+  if(state.unidades[id])return id;
+  // admin enxerga todas; se não existe, marca como não cadastrada
+  IMP.naoCad.add(String(nome).trim()); return null;
+}
+async function analisarArquivos(){
+  const files=[...($('impFiles').files||[])];
+  if(!files.length){toast('Escolha os arquivos primeiro.');return}
+  IMP.docs={};IMP.avisos=[];IMP.naoCad=new Set();
+  const resumo=[];
+  for(const f of files){
+    let rows;
+    try{rows=await lerArquivo(f)}catch(e){resumo.push('⚠️ '+f.name+': erro de leitura — '+e.message);continue}
+    if(!rows.length){resumo.push('⚠️ '+f.name+': vazio');continue}
+    const H={};Object.keys(rows[0]).forEach(k=>H[normH(k)]=k);
+    const has=(...ks)=>ks.every(k=>k in H);
+    const g=(r,k)=>r[H[k]];
+    if(has('contapai','pagamento','valor','unidade')){          /* ── DESPESAS (coleta) ── */
+      let n=0,tot=0;
+      for(const r of rows){
+        const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
+        const d=parseData(g(r,'pagamento'));if(!d)continue;
+        const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
+        const v=nBR(g(r,'valor'));if(v==null)continue;
+        let cat=String(g(r,'contapai')||'').trim();
+        if(cat==='MKT e Vendas - Campanhas de Incentivo Equipe')cat='MKT e Vendas - Campanhas';
+        if(!CATEGORIAS.includes(cat))continue;
+        const doc=docImp(uid,mes);doc.despesas=doc.despesas||{};
+        doc.despesas[cat]=(doc.despesas[cat]||0)+v;n++;tot+=v;
+      }
+      resumo.push('✔ '+f.name+' → <b>Despesas</b>: '+n+' lançamentos, '+brl(tot));
+    } else if(has('origem','unidade')&&('valorpago'in H)){       /* ── MOV FIN ── */
+      let nr=0,tr=0,nd=0,td=0;
+      for(const r of rows){
+        const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
+        const d=parseData(g(r,'pagamento'));if(!d)continue;
+        const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
+        const v=nBR(g(r,'valorpago'));if(v==null)continue;
+        const doc=docImp(uid,mes);
+        if(g(r,'origem')==='Receita'){doc.receitaParcelas=(doc.receitaParcelas||0)+v;nr++;tr+=v;}
+        else if(g(r,'origem')==='Despesa'){
+          let cat=String(g(r,'contapaicurso')||'').trim();
+          if(CATEGORIAS.includes(cat)){doc.despesas=doc.despesas||{};doc.despesas[cat]=(doc.despesas[cat]||0)+Math.abs(v);nd++;td+=Math.abs(v);}
+        }
+      }
+      resumo.push('✔ '+f.name+' → <b>Mov. Financeira</b>: receita '+brl(tr)+' ('+nr+') · despesas '+brl(td)+' ('+nd+')');
+    } else if(has('numerocontrato','data','unidade')){           /* ── MATRÍCULAS ── */
+      const tmp={};let n=0;
+      for(const r of rows){
+        const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
+        const d=parseData(g(r,'data'));if(!d)continue;
+        const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
+        const k=uid+'_'+mes;tmp[k]=tmp[k]||{n:0,s:0,c:0};tmp[k].n++;n++;
+        const vc=nBR(g(r,'valorcalculado'));if(vc&&vc>0){tmp[k].s+=vc;tmp[k].c++}
+      }
+      for(const k in tmp){const[uid,mes]=[k.slice(0,k.lastIndexOf('_')),k.slice(k.lastIndexOf('_')+1)];
+        const doc=docImp(uid,mes);doc.matriculas=tmp[k].n;
+        if(tmp[k].c)doc.ticket=+(tmp[k].s/tmp[k].c).toFixed(2);}
+      resumo.push('✔ '+f.name+' → <b>Matrículas</b>: '+n+' contratos');
+    } else if(has('vencimento','valor')&&('statuscontrato'in H||'proximacobranca'in H)){ /* ── CONTAS A RECEBER ── */
+      const refMes=$('impRefMes').value||new Date().toISOString().slice(0,7);
+      const ref=new Date(+refMes.slice(0,4),+refMes.slice(5,7),0);    // fim do mês ref
+      const temUni='unidade'in H;
+      const porUni={};let tot=0,venc=0;
+      for(const r of rows){
+        const uid=temUni?resolveUid(g(r,'unidade')):($('fecUnit').value||null);
+        if(!uid)continue;
+        const v=nBR(g(r,'valor'));const dv=parseData(g(r,'vencimento'));
+        if(v==null||!dv)continue;
+        porUni[uid]=porUni[uid]||{t:0,v:0};porUni[uid].t+=v;tot+=v;
+        if(dv<ref){porUni[uid].v+=v;venc+=v;}
+      }
+      for(const uid in porUni){const doc=docImp(uid,refMes);
+        doc.carteiraTotal=+porUni[uid].t.toFixed(2);doc.carteiraVencida=+porUni[uid].v.toFixed(2);}
+      resumo.push('✔ '+f.name+' → <b>Contas a Receber</b> (ref. '+refMes+'): carteira '+brl(tot)+' · vencida '+brl(venc)+(temUni?'':' · unidade: a selecionada no formulário acima'));
+    } else {
+      resumo.push('⚠️ '+f.name+': cabeçalho não reconhecido — colunas: '+Object.keys(rows[0]).slice(0,8).join(', '));
+    }
+  }
+  const nd=Object.keys(IMP.docs).length;
+  let html='<div class="hint" style="margin-top:8px">'+resumo.join('<br>')+'</div>';
+  html+='<div class="hint" style="margin-top:6px"><b>'+nd+'</b> registro(s) unidade × mês prontos para gravar (mesclando com o que já existe).</div>';
+  if(IMP.naoCad.size)html+='<div class="hint" style="color:var(--dn);margin-top:4px">Unidades não cadastradas (serão ignoradas): '+[...IMP.naoCad].join(', ')+' — cadastre-as na Administração e analise de novo.</div>';
+  $('impPreview').innerHTML=html;
+  $('impGravarRow').style.display=nd?'flex':'none';
+}
+async function gravarImportacao(){
+  const keys=Object.keys(IMP.docs);
+  if(!keys.length)return;
+  let feito=0;
+  for(let i=0;i<keys.length;i+=400){
+    const batch=db.batch();
+    for(const k of keys.slice(i,i+400)){
+      const doc={...IMP.docs[k],salvoPor:state.user.email,salvoEm:new Date().toISOString()};
+      batch.set(db.collection('fechamentos').doc(k),doc,{merge:true});
+    }
+    await batch.commit();feito+=Math.min(400,keys.length-i);
+    $('impProg').textContent=feito+' / '+keys.length+' gravados…';
+  }
+  // atualiza cache local mesclando
+  for(const k of keys){
+    const atual=state.fech[k]||{};
+    const novo=IMP.docs[k];
+    state.fech[k]={...atual,...novo,despesas:{...(atual.despesas||{}),...(novo.despesas||{})}};
+  }
+  $('impProg').textContent='Concluído: '+keys.length+' registros gravados.';
+  toast('Importação concluída — '+keys.length+' unidade(s)×mês atualizados.');
+  IMP.docs={};$('impGravarRow').style.display='none';
+  initUI();
 }
 
 /* ================================================================
