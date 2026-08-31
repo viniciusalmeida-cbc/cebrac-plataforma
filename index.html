@@ -908,6 +908,21 @@ async function analisarArquivos(){
   $('impAnaProg').textContent='';
   const nd=Object.keys(IMP.docs).length;
   let html='<div class="hint" style="margin-top:8px">'+resumo.join('<br>')+'</div>';
+  // Conferência mês a mês do que será gravado
+  const pm={};
+  for(const d of Object.values(IMP.docs)){
+    const m=pm[d.mes]||(pm[d.mes]={u:new Set(),rec:0,des:0,mat:0});
+    m.u.add(d.unidadeId);
+    m.rec+=(+d.receitaParcelas||0)+(+d.receitaComercial||0);
+    m.des+=Object.values(d.despesas||{}).reduce((a,b)=>a+(+b||0),0);
+    m.mat+=(+d.matriculas||0);
+  }
+  const mk=Object.keys(pm).sort();
+  if(mk.length){
+    html+='<div class="twrap" style="margin-top:8px"><table class="dt"><thead><tr><th>Mês</th><th class="num">Unidades</th><th class="num">Receita</th><th class="num">Despesas</th><th class="num">Matrículas</th></tr></thead><tbody>'
+      +mk.map(m=>`<tr><td><b>${mLbl(m)}</b></td><td class="num">${pm[m].u.size}</td><td class="num">${pm[m].rec?brl(pm[m].rec):'—'}</td><td class="num">${pm[m].des?brl(pm[m].des):'—'}</td><td class="num">${pm[m].mat||'—'}</td></tr>`).join('')
+      +`<tr class="tot"><td>Total</td><td class="num">${new Set(Object.values(IMP.docs).map(d=>d.unidadeId)).size}</td><td class="num">${brl(mk.reduce((a,m)=>a+pm[m].rec,0))}</td><td class="num">${brl(mk.reduce((a,m)=>a+pm[m].des,0))}</td><td class="num">${mk.reduce((a,m)=>a+pm[m].mat,0)||'—'}</td></tr></tbody></table></div>`;
+  }
   html+='<div class="hint" style="margin-top:6px"><b>'+nd+'</b> registro(s) unidade × mês prontos para gravar (mesclando com o que já existe).</div>';
   if(IMP.naoCad.size)html+='<div class="hint" style="color:var(--dn);margin-top:4px">Unidades não cadastradas (serão ignoradas): '+[...IMP.naoCad].join(', ')+' — cadastre-as na Administração e analise de novo.</div>';
   $('impPreview').innerHTML=html;
