@@ -267,7 +267,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   <div class="panel">
     <div class="panel-t">Importar extrações do sistema (recomendado)</div>
     <div class="panel-s">Solte aqui os arquivos exportados do sistema, do jeito que saem (.csv ou .xlsx). A plataforma reconhece o formato pelo cabeçalho, agrega por unidade × mês e mescla com o que já existe no banco — sem apagar campos já preenchidos.</div>
-    <div class="hint" style="margin-bottom:8px">Formatos reconhecidos: <b>Despesas</b> (unidade, conta, contapai, pagamento, valor) · <b>Movimentação Financeira</b> (Origem, Valor Pago — gera receita e despesas) · <b>Matrículas</b> (Numero Contrato, Data — gera matrículas e ticket) · <b>Contas a Receber</b> (Vencimento, Valor — gera carteira e vencida na data de referência).</div>
+    <div class="hint" style="margin-bottom:8px">Formatos reconhecidos: <b>Despesas</b> (unidade, conta, contapai, pagamento, valor) · <b>Faturamento Analítico</b> (unidade_apelido, valorpago, tiporecebimento, quitacao — gera receitas por tipo) · <b>Movimentação Financeira</b> (Origem, Valor Pago — gera receita e despesas) · <b>Matrículas</b> (Numero Contrato, Data — gera matrículas e ticket) · <b>Contas a Receber</b> (Vencimento, Valor — gera carteira e vencida na data de referência).</div>
     <div class="filters">
       <input type="file" id="impFiles" multiple accept=".csv,.xlsx,.xls">
       <input type="month" id="impRefMes" title="Mês de referência para Carteira (Contas a Receber)">
@@ -324,6 +324,11 @@ const firebaseConfig = {
 };
 const TITULO = "Rede Cebrac";
 
+/* Login: false = acesso aberto (fase inicial de visualização);
+   true  = exige login Google/e-mail e aplica permissões por unidade.
+   Ao reativar, publique também o firestore.rules (versão segura). */
+const AUTH_ENABLED = false;
+
 /* Categorias de despesa — mesmas do DRE da rede */
 const CATEGORIAS = ["Impostos e Taxas","Ocupação","Compras de Mercadorias","Administrativas",
 "MKT e Vendas - Captação Online","MKT e Vendas - Captação Offline","MKT e Vendas - Campanhas",
@@ -360,9 +365,19 @@ $('barLogo').innerHTML=cebracLogoSVG(38,23);
 function loginGoogle(){ auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>showLoginErr(e.message)); }
 function loginEmail(){ auth.signInWithEmailAndPassword($('loginEmail').value.trim(),$('loginPass').value).catch(e=>showLoginErr(e.message)); }
 function showLoginErr(m){ const e=$('loginErr'); e.textContent=m; e.style.display='block'; }
-function sair(){ auth.signOut(); }
+function sair(){ if(!AUTH_ENABLED){toast('Login desativado nesta fase — nada a encerrar.');return;} auth.signOut(); }
 
+if(!AUTH_ENABLED){
+  // Acesso aberto: perfil administrador virtual, sem tela de login
+  state.user={email:'acesso-aberto'};
+  state.perfil={papel:'admin',unidades:['*']};
+  $('loginView').style.display='none'; $('appView').style.display='block';
+  $('barUser').textContent='acesso aberto (sem login)';
+  $('tabAdmin').style.display='';
+  carregarTudo().catch(e=>toast('Erro ao carregar: '+e.message));
+}
 auth.onAuthStateChanged(async user=>{
+  if(!AUTH_ENABLED)return;
   if(!user){ $('loginView').style.display='flex'; $('appView').style.display='none'; return; }
   state.user=user;
   try{
@@ -824,6 +839,24 @@ async function analisarArquivos(){
         const doc=docImp(uid,mes);doc.matriculas=tmp[k].n;
         if(tmp[k].c)doc.ticket=+(tmp[k].s/tmp[k].c).toFixed(2);}
       resumo.push('✔ '+f.name+' → <b>Matrículas</b>: '+n+' contratos');
+    } else if(has('valorpago','tiporecebimento','quitacao')&&('unidadeapelido'in H||'unidade'in H)){ /* ── FATURAMENTO ANALÍTICO ── */
+      const uKey='unidadeapelido'in H?'unidadeapelido':'unidade';
+      const REC=['SCPC','Serasa','Judicial','Protesto','Cheque devolvido'];
+      let n=0,tp=0,tc=0,tr=0;
+      for(const r of rows){
+        const uid=resolveUid(g(r,uKey));if(!uid)continue;
+        const d=parseData(g(r,'quitacao'));if(!d)continue;
+        const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
+        const v=nBR(g(r,'valorpago'));if(v==null)continue;
+        const tipo=String(g(r,'tiporecebimento')||'').trim()||'Outros';
+        const doc=docImp(uid,mes);
+        doc.receitaTipos=doc.receitaTipos||{};
+        doc.receitaTipos[tipo]=(doc.receitaTipos[tipo]||0)+v;
+        if(tipo==='Parcela'){doc.receitaParcelas=(doc.receitaParcelas||0)+v;tp+=v;}
+        else{doc.receitaComercial=(doc.receitaComercial||0)+v;if(REC.includes(tipo))tr+=v;else tc+=v;}
+        n++;
+      }
+      resumo.push('✔ '+f.name+' → <b>Faturamento Analítico</b>: '+n+' títulos · parcelas '+brl(tp)+' · comercial/outros '+brl(tc)+' · recuperação '+brl(tr));
     } else if(has('vencimento','valor')&&('statuscontrato'in H||'proximacobranca'in H)){ /* ── CONTAS A RECEBER ── */
       const refMes=$('impRefMes').value||new Date().toISOString().slice(0,7);
       const ref=new Date(+refMes.slice(0,4),+refMes.slice(5,7),0);    // fim do mês ref
