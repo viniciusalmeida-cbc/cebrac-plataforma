@@ -155,6 +155,8 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   <button class="tab" data-v="dre" onclick="goTab('dre')">DRE da Unidade</button>
   <button class="tab" data-v="comparativo" onclick="goTab('comparativo')">Comparativo</button>
   <button class="tab" data-v="fechamento" onclick="goTab('fechamento')">Fechamento Mensal</button>
+  <button class="tab" data-v="alunos" onclick="goTab('alunos')">Painel de Alunos</button>
+  <button class="tab" data-v="metas" onclick="goTab('metas')">Metas &amp; Crescimento</button>
   <button class="tab" data-v="admin" id="tabAdmin" style="display:none" onclick="goTab('admin')">Administração</button>
 </div>
 
@@ -287,6 +289,36 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   </div>
 </div>
 
+<!-- ══════ PAINEL DE ALUNOS ══════ -->
+<div class="view" id="view-alunos" style="padding:10px 12px 20px;max-width:none">
+  <div class="filters" style="margin-bottom:8px">
+    <span class="cnt">Painel de acompanhamento de alunos (módulo independente — carregue o CSV de alunos dentro dele).</span>
+    <a class="btn ghost" href="painel_rede.html" target="_blank" style="text-decoration:none">Abrir em tela cheia ↗</a>
+  </div>
+  <iframe src="painel_rede.html" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
+</div>
+
+<!-- ══════ METAS & CRESCIMENTO ══════ -->
+<div class="view" id="view-metas" style="padding:10px 12px 20px;max-width:none">
+  <div id="metasSemUrl" class="panel" style="max-width:760px;margin:30px auto">
+    <div class="panel-t">Dashboard de Metas &amp; Crescimento</div>
+    <div class="panel-s">O dashboard unificado (Apps Script) ainda não foi conectado a esta aba.</div>
+    <div class="hint">
+      1. No projeto do Apps Script, implante o app <b>Porteiro</b> (Executar como: usuário que acessa · Acesso: qualquer conta Google) e copie a URL <b>/exec</b>.<br>
+      2. Abra este index.html no GitHub (lápis) e cole a URL na constante <b>DASH_METAS_URL</b>, no bloco CONFIG do topo do script.<br>
+      3. Commit — esta aba passa a abrir o dashboard automaticamente.
+    </div>
+  </div>
+  <div id="metasComUrl" style="display:none">
+    <div class="filters" style="margin-bottom:8px">
+      <span class="cnt">Dashboard de Metas &amp; Crescimento (Apps Script — login e permissões próprios).</span>
+      <a class="btn ghost" id="metasLink" href="#" target="_blank" style="text-decoration:none">Abrir em tela cheia ↗</a>
+    </div>
+    <iframe id="metasFrame" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
+    <p class="hint" style="margin-top:6px">Se o dashboard não carregar aqui dentro (o login do Google às vezes bloqueia janelas embutidas), use o botão "Abrir em tela cheia".</p>
+  </div>
+</div>
+
 <!-- ══════ ADMIN ══════ -->
 <div class="view" id="view-admin">
   <div class="panel">
@@ -329,6 +361,10 @@ const TITULO = "Rede Cebrac";
    true  = exige login Google/e-mail e aplica permissões por unidade.
    Ao reativar, publique também o firestore.rules (versão segura). */
 const AUTH_ENABLED = false;
+
+/* URL /exec do Dashboard Unificado (Metas + Crescimento) publicado no
+   Apps Script — o app "Porteiro". Cole aqui quando quiser a aba integrada. */
+const DASH_METAS_URL = "";
 
 /* Categorias de despesa — mesmas do DRE da rede */
 const CATEGORIAS = ["Impostos e Taxas","Ocupação","Compras de Mercadorias","Administrativas",
@@ -1003,6 +1039,13 @@ function goTab(v){
   $('view-'+v).classList.add('active');
   if(v==='rede')renderRede(); if(v==='dre')renderDRE();
   if(v==='comparativo')renderChips(); if(v==='admin')renderAdmin();
+  if(v==='metas'){
+    const tem=!!DASH_METAS_URL;
+    $('metasSemUrl').style.display=tem?'none':'block';
+    $('metasComUrl').style.display=tem?'block':'none';
+    if(tem){$('metasLink').href=DASH_METAS_URL;
+      if(!$('metasFrame').src||$('metasFrame').src==='about:blank')$('metasFrame').src=DASH_METAS_URL;}
+  }
 }
 </script>
 </body>
