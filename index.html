@@ -164,7 +164,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   <div id="redeContent" style="display:none">
     <div class="kpi-grid" id="redeKpis"></div>
     <div class="filters">
-      <input type="month" id="fMes" onchange="renderRede()">
+      <input type="month" id="fMes" list="mesesDisp" onchange="renderRede()"><datalist id="mesesDisp"></datalist>
       <input type="text" id="fBusca" placeholder="Buscar unidade…" oninput="renderRede()">
       <select id="fRegiao" onchange="renderRede()"><option value="">Todas as carteiras</option></select>
       <select id="fCluster" onchange="renderRede()"><option value="">Todos os clusters</option></select>
@@ -429,7 +429,9 @@ function initUI(){
   const meses=[...new Set(Object.values(state.fech).map(f=>f.mes))].sort();
   const anos=[...new Set(meses.map(m=>m.slice(0,4)))].sort().reverse();
   $('dreAno').innerHTML=anos.map(a=>`<option>${a}</option>`).join('')||'<option>'+new Date().getFullYear()+'</option>';
-  if(!$('fMes').value)$('fMes').value=meses.slice(-1)[0]||new Date().toISOString().slice(0,7);
+  $('mesesDisp').innerHTML=meses.map(m=>`<option value="${m}">${mLbl(m)}</option>`).join('');
+  const mesesComReceita=[...new Set(Object.values(state.fech).filter(f=>(+f.receitaParcelas||0)+(+f.receitaComercial||0)>0).map(f=>f.mes))].sort();
+  if(!$('fMes').value)$('fMes').value=mesesComReceita.slice(-1)[0]||meses.slice(-1)[0]||new Date().toISOString().slice(0,7);
   if(!$('fecMes').value)$('fecMes').value=new Date().toISOString().slice(0,7);
   // filtros de região/cluster
   const regs=[...new Set(Object.values(state.unidades).map(u=>u.carteira).filter(Boolean))].sort();
@@ -489,8 +491,10 @@ function renderRede(){
   const tFat=com.reduce((s,r)=>s+r.sc.f.faturamento,0), tDes=com.reduce((s,r)=>s+r.sc.f.despTotal,0);
   const tRes=tFat-tDes;
   const nG=com.filter(r=>r.sc.sem==='g').length,nA=com.filter(r=>r.sc.sem==='a').length,nR=com.filter(r=>r.sc.sem==='r').length;
+  const nRec=com.filter(r=>r.sc.f.faturamento>0).length;
+  const avisoRec=nRec===0&&com.length?'⚠ só despesas neste mês — escolha outro mês':nRec+' de '+com.length+' unidades com receita';
   $('redeKpis').innerHTML=[
-    {l:'Faturamento da rede · '+mLbl(mes),v:brl(tFat),c:'var(--blue)'},
+    {l:'Faturamento da rede · '+mLbl(mes),v:brl(tFat),s:avisoRec,c:nRec===0&&com.length?'var(--dn)':'var(--blue)'},
     {l:'Despesas',v:brl(tDes),c:'var(--gold-dk)'},
     {l:'Resultado',v:brl(tRes),c:tRes>=0?'var(--green)':'var(--dn)'},
     {l:'Lucratividade',v:pct(tFat>0?tRes/tFat:null),c:'var(--blue-dk)'},
