@@ -272,6 +272,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
       <input type="file" id="impFiles" multiple accept=".csv,.xlsx,.xls">
       <input type="month" id="impRefMes" title="Mês de referência para Carteira (Contas a Receber)">
       <button class="btn" onclick="analisarArquivos()">1 · Analisar arquivos</button>
+      <span class="cnt" id="impAnaProg"></span>
     </div>
     <div id="impPreview"></div>
     <div class="btn-row" id="impGravarRow" style="display:none">
@@ -749,7 +750,7 @@ function parseData(v){
   if(v instanceof Date)return isNaN(v)?null:v;
   if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);return d?new Date(d.y,d.m-1,d.d):null}
   const t=String(v).trim();
-  let m=t.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);
+  let m=t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);
   m=t.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);
   return null;
 }
@@ -766,17 +767,24 @@ function lerArquivo(file){
       }catch(e){rej(e)}};
       r.readAsArrayBuffer(file);
     }else{
-      r.onload=()=>{try{
+      r.onload=async()=>{try{
         let txt=r.result; if(txt.charCodeAt(0)===0xFEFF)txt=txt.slice(1);
-        const lines=txt.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+        const lines=txt.replace(/\r/g,'').split('\n');
         const sep=lines[0].split(';').length>lines[0].split(',').length?';':',';
-        const H=csvSplit(lines[0],sep);
-        res(lines.slice(1).map(l=>{const c=csvSplit(l,sep);const o={};H.forEach((h,i)=>o[h]=c[i]??null);return o}));
+        const H=csvSplit(lines[0],sep).map(h=>h.trim());
+        const out=[];
+        for(let i=1;i<lines.length;i++){
+          const l=lines[i]; if(!l.trim())continue;
+          const c=csvSplit(l,sep);const o={};H.forEach((h,k)=>{if(h)o[h]=c[k]??null});out.push(o);
+          if(i%8000===0)await tick('Lendo '+file.name+': '+Math.round(i/lines.length*100)+'%');
+        }
+        res(out);
       }catch(e){rej(e)}};
       r.readAsText(file,'utf-8');
     }
   });
 }
+function tick(msg){ if(msg!=null)$('impAnaProg').textContent=msg; return new Promise(r=>setTimeout(r,0)); }
 function docImp(uid,mes){return IMP.docs[uid+'_'+mes]||(IMP.docs[uid+'_'+mes]={unidadeId:uid,mes})}
 function resolveUid(nome){
   if(!nome)return null;
@@ -790,16 +798,19 @@ async function analisarArquivos(){
   if(!files.length){toast('Escolha os arquivos primeiro.');return}
   IMP.docs={};IMP.avisos=[];IMP.naoCad=new Set();
   const resumo=[];
+  $('impPreview').innerHTML='';$('impGravarRow').style.display='none';
+  await tick('Iniciando…');
   for(const f of files){
     let rows;
     try{rows=await lerArquivo(f)}catch(e){resumo.push('⚠️ '+f.name+': erro de leitura — '+e.message);continue}
     if(!rows.length){resumo.push('⚠️ '+f.name+': vazio');continue}
+    try{
     const H={};Object.keys(rows[0]).forEach(k=>H[normH(k)]=k);
     const has=(...ks)=>ks.every(k=>k in H);
     const g=(r,k)=>r[H[k]];
     if(has('contapai','pagamento','valor','unidade')){          /* ── DESPESAS (coleta) ── */
       let n=0,tot=0;
-      for(const r of rows){
+      for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
         const d=parseData(g(r,'pagamento'));if(!d)continue;
         const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
@@ -813,7 +824,7 @@ async function analisarArquivos(){
       resumo.push('✔ '+f.name+' → <b>Despesas</b>: '+n+' lançamentos, '+brl(tot));
     } else if(has('origem','unidade')&&('valorpago'in H)){       /* ── MOV FIN ── */
       let nr=0,tr=0,nd=0,td=0;
-      for(const r of rows){
+      for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
         const d=parseData(g(r,'pagamento'));if(!d)continue;
         const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
@@ -828,7 +839,7 @@ async function analisarArquivos(){
       resumo.push('✔ '+f.name+' → <b>Mov. Financeira</b>: receita '+brl(tr)+' ('+nr+') · despesas '+brl(td)+' ('+nd+')');
     } else if(has('numerocontrato','data','unidade')){           /* ── MATRÍCULAS ── */
       const tmp={};let n=0;
-      for(const r of rows){
+      for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
         const d=parseData(g(r,'data'));if(!d)continue;
         const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
@@ -843,7 +854,7 @@ async function analisarArquivos(){
       const uKey='unidadeapelido'in H?'unidadeapelido':'unidade';
       const REC=['SCPC','Serasa','Judicial','Protesto','Cheque devolvido'];
       let n=0,tp=0,tc=0,tr=0;
-      for(const r of rows){
+      for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=resolveUid(g(r,uKey));if(!uid)continue;
         const d=parseData(g(r,'quitacao'));if(!d)continue;
         const mes=mesDe(d);if(mes<'2024-01'||mes>'2030-12')continue;
@@ -862,7 +873,7 @@ async function analisarArquivos(){
       const ref=new Date(+refMes.slice(0,4),+refMes.slice(5,7),0);    // fim do mês ref
       const temUni='unidade'in H;
       const porUni={};let tot=0,venc=0;
-      for(const r of rows){
+      for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=temUni?resolveUid(g(r,'unidade')):($('fecUnit').value||null);
         if(!uid)continue;
         const v=nBR(g(r,'valor'));const dv=parseData(g(r,'vencimento'));
@@ -876,7 +887,10 @@ async function analisarArquivos(){
     } else {
       resumo.push('⚠️ '+f.name+': cabeçalho não reconhecido — colunas: '+Object.keys(rows[0]).slice(0,8).join(', '));
     }
+    }catch(e){resumo.push('⚠️ '+f.name+': erro ao analisar — '+e.message);console.error(e);}
+    rows=null;
   }
+  $('impAnaProg').textContent='';
   const nd=Object.keys(IMP.docs).length;
   let html='<div class="hint" style="margin-top:8px">'+resumo.join('<br>')+'</div>';
   html+='<div class="hint" style="margin-top:6px"><b>'+nd+'</b> registro(s) unidade × mês prontos para gravar (mesclando com o que já existe).</div>';
@@ -894,8 +908,9 @@ async function gravarImportacao(){
       const doc={...IMP.docs[k],salvoPor:state.user.email,salvoEm:new Date().toISOString()};
       batch.set(db.collection('fechamentos').doc(k),doc,{merge:true});
     }
-    await batch.commit();feito+=Math.min(400,keys.length-i);
-    $('impProg').textContent=feito+' / '+keys.length+' gravados…';
+    try{await batch.commit();}catch(e){$('impProg').textContent='Erro ao gravar: '+e.message;toast('Erro ao gravar — verifique as regras do Firestore.');return;}
+    feito+=Math.min(400,keys.length-i);
+    $('impProg').textContent=feito+' / '+keys.length+' gravados…';await tick();
   }
   // atualiza cache local mesclando
   for(const k of keys){
