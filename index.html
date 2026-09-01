@@ -112,6 +112,10 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 .st-b{font-size:11.5px;color:var(--t2);max-width:480px;line-height:1.6}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--t1);color:#fff;padding:11px 17px;border-radius:10px;font-size:12px;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:900}
 .toast.show{opacity:1;transform:none}
+.tip-cell{cursor:help;border-bottom:1px dotted var(--t3)}
+.tip-cell.acima{color:var(--dn)} .tip-cell.abaixo{color:var(--green-dk)}
+.dretip{position:fixed;z-index:950;background:var(--t1);color:#fff;padding:10px 13px;border-radius:9px;font-size:11px;line-height:1.65;max-width:300px;pointer-events:none;display:none;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.dretip b{color:var(--gold)} .dretip .mini{color:rgba(255,255,255,.6);font-size:10px}
 .tag-adm{background:var(--gold);color:var(--blue-dk);font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
 @media(max-width:960px){.crow.c2{grid-template-columns:1fr}}
 </style>
@@ -299,24 +303,31 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 </div>
 
 <!-- ══════ METAS & CRESCIMENTO ══════ -->
-<div class="view" id="view-metas" style="padding:10px 12px 20px;max-width:none">
-  <div id="metasSemUrl" class="panel" style="max-width:760px;margin:30px auto">
-    <div class="panel-t">Dashboard de Metas &amp; Crescimento</div>
-    <div class="panel-s">O dashboard unificado (Apps Script) ainda não foi conectado a esta aba.</div>
-    <div class="hint">
-      1. No projeto do Apps Script, implante o app <b>Porteiro</b> (Executar como: usuário que acessa · Acesso: qualquer conta Google) e copie a URL <b>/exec</b>.<br>
-      2. Abra este index.html no GitHub (lápis) e cole a URL na constante <b>DASH_METAS_URL</b>, no bloco CONFIG do topo do script.<br>
-      3. Commit — esta aba passa a abrir o dashboard automaticamente.
-    </div>
+<div class="view" id="view-metas">
+  <div class="filters">
+    <select id="mMes" onchange="renderMetas()"></select>
+    <select id="mCart" onchange="renderMetas()"><option value="">Todas as carteiras</option></select>
+    <input type="text" id="mBusca" placeholder="Buscar unidade…" oninput="renderMetas()">
+    <span class="cnt" id="mStatus"></span>
+    <a class="btn ghost" id="mLinkClassico" href="#" target="_blank" style="text-decoration:none;display:none">Versão clássica ↗</a>
   </div>
-  <div id="metasComUrl" style="display:none">
-    <div class="filters" style="margin-bottom:8px">
-      <span class="cnt">Dashboard de Metas &amp; Crescimento (Apps Script — login e permissões próprios).</span>
-      <a class="btn ghost" id="metasLink" href="#" target="_blank" style="text-decoration:none">Abrir em tela cheia ↗</a>
-    </div>
-    <iframe id="metasFrame" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
-    <p class="hint" style="margin-top:6px">Se o dashboard não carregar aqui dentro (o login do Google às vezes bloqueia janelas embutidas), use o botão "Abrir em tela cheia".</p>
+  <div id="mAvisoCebrac" class="panel" style="display:none">
+    <div class="hint">⚠ A planilha <b>Cebrac (metas/funil)</b> ainda não está publicada — mostrando apenas o lado de <b>crescimento ano × ano</b>. Para habilitar metas, funil e projeções: abra a planilha Cebrac → Arquivo → Compartilhar → Publicar na web → CSV → cole o link (até /pub) em <b>METAS_CFG.cebracBase</b> no index.html.</div>
   </div>
+  <div class="kpi-grid" id="mKpis"></div>
+  <div class="crow c2">
+    <div class="cc"><div class="cc-t">Atingimento da meta de faturamento</div><div class="cc-s">% por unidade · linha em 100%</div>
+      <div class="chart-box tall"><canvas id="cRankMeta"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Crescimento ano × ano (Fat. Total)</div><div class="cc-s">% por unidade</div>
+      <div class="chart-box tall"><canvas id="cRankYoY"></canvas></div></div>
+  </div>
+  <div class="crow c2">
+    <div class="cc"><div class="cc-t">Funil comercial do mês</div><div class="cc-s">soma das unidades filtradas</div>
+      <div id="mFunil" style="padding:6px 4px"></div></div>
+    <div class="cc"><div class="cc-t">Situação ano × ano</div><div class="cc-s">unidades crescendo · estáveis · em queda</div>
+      <div class="chart-box"><canvas id="cDntYoY"></canvas></div></div>
+  </div>
+  <div class="tcard"><div class="twrap"><table class="dt" id="mTable"></table></div></div>
 </div>
 
 <!-- ══════ ADMIN ══════ -->
@@ -340,6 +351,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 
 </div><!-- /appView -->
 <div class="toast" id="toast"></div>
+<div class="dretip" id="dretip"></div>
 
 <script>
 /* ================================================================
@@ -364,7 +376,31 @@ const AUTH_ENABLED = false;
 
 /* URL /exec do Dashboard Unificado (Metas + Crescimento) publicado no
    Apps Script — o app "Porteiro". Cole aqui quando quiser a aba integrada. */
-const DASH_METAS_URL = "https://script.google.com/macros/s/AKfycbz0UWYrq1_m44nG4zblT6_rIofLGqmaeuv6fQEOPLgNWlb4n3KCvMv9WwGffs3hl3xfiw/exec";
+const DASH_METAS_URL = "";
+
+/* ── Metas & Crescimento (nativo) ─────────────────────────────
+   perfBase: planilha Performance Analytics publicada (já ativa).
+   cebracBase: planilha Cebrac (metas/funil) — publique-a na web
+   (Arquivo → Compartilhar → Publicar na web → documento inteiro →
+   CSV) e cole aqui o link até "/pub" (sem ?gid=...). Enquanto vazio,
+   a aba mostra só o lado de crescimento (Performance). */
+const METAS_CFG={
+  perfBase:'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3Zu2EAyZ52s8dTPmLCAsfgGLHs4S2g5bB_k_MFC7UGJqJ1tgiRVL03VGbmRy4lm4X6emv2qqPBb3_/pub',
+  cebracBase:''
+};
+const METAS_MESES=[
+ {key:'janeiro',label:'Janeiro',ordem:1,gidCebrac:1231568942,gidPerf:60235348},
+ {key:'fevereiro',label:'Fevereiro',ordem:2,gidCebrac:407181282,gidPerf:205413384},
+ {key:'marco',label:'Março',ordem:3,gidCebrac:1532992689,gidPerf:0},
+ {key:'abril',label:'Abril',ordem:4,gidCebrac:1075754445,gidPerf:1026822465},
+ {key:'maio',label:'Maio',ordem:5,gidCebrac:567634012,gidPerf:657363475},
+ {key:'junho',label:'Junho',ordem:6,gidCebrac:1837726228,gidPerf:335871254},
+ {key:'julho',label:'Julho',ordem:7,gidCebrac:1541733738,gidPerf:506330201},
+ {key:'agosto',label:'Agosto',ordem:8,gidCebrac:973395941,gidPerf:1733997243},
+ {key:'setembro',label:'Setembro',ordem:9,gidCebrac:1328547216,gidPerf:631096711},
+ {key:'outubro',label:'Outubro',ordem:10,gidCebrac:1586232344,gidPerf:1459458149},
+ {key:'novembro',label:'Novembro',ordem:11,gidCebrac:725078647,gidPerf:841361709},
+ {key:'dezembro',label:'Dezembro',ordem:12,gidCebrac:2063538110,gidPerf:1318823229}];
 
 /* Categorias de despesa — mesmas do DRE da rede */
 const CATEGORIAS = ["Impostos e Taxas","Ocupação","Compras de Mercadorias","Administrativas",
@@ -602,13 +638,41 @@ function renderDRE(){
     tb+='<tr class="sec"><td colspan="'+(cols.length+2)+'">Abertura da receita por tipo de recebimento (caixa)</td></tr>';
     for(const t of tipos)tb+=row('  '+t,serie.map(f=>+((f.receitaTipos||{})[t])||0),brl);
   }
-  tb+='<tr class="sec"><td colspan="'+(cols.length+2)+'">Despesas por categoria</td></tr>';
+  // ── Média da rede por mês (unidades com despesa no mês) ──
+  const redeMes={};
+  for(const m of cols){
+    const todos=Object.values(state.fech).filter(f=>f.mes===m).map(metr).filter(f=>f.despTotal>0);
+    const n=todos.length||1;
+    const med={n:todos.length,fat:todos.reduce((a,f)=>a+f.faturamento,0)/n,despTotal:todos.reduce((a,f)=>a+f.despTotal,0)/n,cat:{}};
+    for(const c of CATEGORIAS)med.cat[c]=todos.reduce((a,f)=>a+(+((f.despesas||{})[c])||0),0)/n;
+    redeMes[m]=med;
+  }
+  const tipHtml=(label,m,val,media,fatU,fatR,n)=>{
+    const dif=media>0?(val-media)/media*100:null;
+    const pU=fatU>0?val/fatU*100:null, pR=fatR>0?media/fatR*100:null;
+    return `<b>${label}</b> · ${mLbl(m)}<br>Média da rede: <b>${brl(media)}</b> <span class="mini">(${n} unidades)</span><br>`+
+      `Esta unidade: ${brl(val)}${dif!=null?' <span style="color:'+(dif>0?'#FF8A80':'#9BE7A0')+'">('+(dif>=0?'+':'')+pcts(dif)+' vs média)</span>':''}<br>`+
+      `<span class="mini">% da receita — rede ${pR!=null?pcts(pR):'—'} · unidade ${pU!=null?pcts(pU):'—'}</span>`;
+  };
+  const rowTip=(label,vals,getMedia,cls='')=>{
+    const tot=vals.reduce((a,v)=>a+(v||0),0);
+    let h=`<tr class="${cls}"><td>${label}</td>`;
+    vals.forEach((v,i)=>{
+      const m=cols[i], med=redeMes[m], media=getMedia(med);
+      const dif=media>0?(v-media)/media*100:null;
+      const c=dif==null?'':dif>15?'acima':dif<-15?'abaixo':'';
+      const tip=tipHtml(label.replace(/^\(-\) /,''),m,v,media,serie[i].faturamento,med.fat,med.n).replace(/"/g,'&quot;');
+      h+=`<td class="num"><span class="tip-cell ${c}" data-tip="${tip}">${brl(v)}</span></td>`;
+    });
+    return h+`<td class="num"><b>${brl(tot)}</b></td></tr>`;
+  };
+  tb+='<tr class="sec"><td colspan="'+(cols.length+2)+'">Despesas por categoria <span style="font-weight:400;text-transform:none;letter-spacing:0">· passe o mouse para ver a média da rede (vermelho = 15% acima da média · verde = 15% abaixo)</span></td></tr>';
   for(const c of CATEGORIAS){
     const vals=serie.map(f=>+((f.despesas||{})[c])||0);
     if(vals.every(v=>!v))continue;
-    tb+=row(c,vals,brl);
+    tb+=rowTip(c,vals,med=>med.cat[c]);
   }
-  tb+=row('(-) DESPESAS TOTAIS',serie.map(f=>f.despTotal),brl,'tot');
+  tb+=rowTip('(-) DESPESAS TOTAIS',serie.map(f=>f.despTotal),med=>med.despTotal,'tot');
   tb+=row('(=) RESULTADO OPERACIONAL',serie.map(f=>f.resultado),v=>v==null?'—':`<span class="pill ${v>=0?'up':'dn'}">${brl(v)}</span>`,'tot');
   tb+='<tr><td>Lucratividade %</td>'+serie.map(f=>`<td class="num">${pct(f.lucratividade)}</td>`).join('')+`<td class="num">${pct(serie.reduce((s,f)=>s+f.faturamento,0)>0?acum/serie.reduce((s,f)=>s+f.faturamento,0):null)}</td></tr>`;
   tb+='<tr><td>Inadimplência %</td>'+serie.map(f=>`<td class="num">${pcts(f.inadimplencia)}</td>`).join('')+'<td class="num">—</td></tr>';
@@ -991,6 +1055,159 @@ async function gravarImportacao(){
 }
 
 /* ================================================================
+   METAS & CRESCIMENTO — nativo (lê as planilhas publicadas)
+================================================================ */
+let META_INIT=false;
+function initMetas(){
+  if(!META_INIT){
+    META_INIT=true;
+    const mesAtual=new Date().getMonth()+1;
+    $('mMes').innerHTML=METAS_MESES.map(m=>`<option value="${m.key}"${m.ordem===mesAtual?' selected':''}>${m.label}</option>`).join('');
+    if(DASH_METAS_URL){$('mLinkClassico').style.display='';$('mLinkClassico').href=DASH_METAS_URL;}
+    $('mAvisoCebrac').style.display=METAS_CFG.cebracBase?'none':'block';
+  }
+  renderMetas();
+}
+async function metasFetch(mesKey){
+  if(state.metasCache[mesKey])return state.metasCache[mesKey];
+  const m=METAS_MESES.find(x=>x.key===mesKey);
+  $('mStatus').textContent='Carregando '+m.label+'…';
+  const getCsv=async url=>{
+    const r=await fetch(url+'&t='+Date.now());
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    let t=await r.text(); if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+    return t.replace(/\r/g,'').split('\n').filter(l=>l.trim()).map(l=>csvSplit(l,','));
+  };
+  const jobs=[getCsv(METAS_CFG.perfBase+'?gid='+m.gidPerf+'&single=true&output=csv')];
+  if(METAS_CFG.cebracBase)jobs.push(getCsv(METAS_CFG.cebracBase+'?gid='+m.gidCebrac+'&single=true&output=csv'));
+  const [perf,cebrac]=await Promise.allSettled(jobs).then(rs=>rs.map(r=>r.status==='fulfilled'?r.value:null));
+  const rows=new Map();
+  const get=k=>{ if(!rows.has(k))rows.set(k,{}); return rows.get(k); };
+  // Performance: colunas fixas (1=Unidade 2=Carteira 3=Tamanho 5/6 fat total, 9/10 fat mat, 13/14 fat rec, 17/18 matrículas)
+  if(perf)for(let i=1;i<perf.length;i++){
+    const c=perf[i], nome=(c[1]||'').trim(); if(!nome)continue;
+    if(/^(total|soma|media|média)/i.test(nome))continue;
+    if(/^fechad/i.test((c[2]||'')))continue;
+    const o=get(normH(nome));
+    o.nome=nome; o.carteira=o.carteira||(c[2]||'').trim(); o.tamanho=o.tamanho||(c[3]||'').trim();
+    o.fatAtual=nBR(c[5]); o.fatAnterior=nBR(c[6]);
+    o.matAtual=nBR(c[17]); o.matAnterior=nBR(c[18]);
+  }
+  // Cebrac (metas/funil): cabeçalho por nome
+  if(cebrac&&cebrac.length>1){
+    const H=cebrac[0].map(normH);
+    const ix=n=>H.indexOf(n);
+    const I={u:ix('unidadeapelido'),cart:ix('carteira'),tam:ix('tamanho'),mf:ix('metafaturamento'),
+      f:ix('fat')>=0?ix('fat'):ix('faturamento'),mm:ix('metamatricula'),mat:ix('matriculas'),
+      vis:ix('visitas'),ag:ix('agendamentos'),pf:ix('projecaofat'),pm:ix('projecaomat')};
+    for(let i=1;i<cebrac.length;i++){
+      const c=cebrac[i], nome=(c[I.u]||'').trim(); if(!nome)continue;
+      const cart=(c[I.cart]||'').trim();
+      if(cart.toLowerCase()==='fora'||/^0([.,]0+)?$/.test(cart))continue;
+      const o=get(normH(nome));
+      o.nome=o.nome||nome; o.carteira=cart||o.carteira; o.tamanho=(c[I.tam]||'').trim()||o.tamanho;
+      o.metaFat=nBR(c[I.mf]); o.fat=nBR(c[I.f]); o.metaMat=nBR(c[I.mm]); o.mat=nBR(c[I.mat]);
+      o.visitas=nBR(c[I.vis]); o.agend=nBR(c[I.ag]); o.projFat=nBR(c[I.pf]); o.projMat=nBR(c[I.pm]);
+    }
+  }
+  const lista=[...rows.values()].filter(o=>o.nome).map(o=>{
+    o.atgFat=(o.metaFat>0&&o.fat!=null)?o.fat/o.metaFat*100:null;
+    o.atgMat=(o.metaMat>0&&o.mat!=null)?o.mat/o.metaMat*100:null;
+    o.yoy=(o.fatAnterior>0&&o.fatAtual!=null)?(o.fatAtual-o.fatAnterior)/Math.abs(o.fatAnterior)*100:null;
+    return o;
+  });
+  state.metasCache[mesKey]={lista,temCebrac:!!cebrac};
+  return state.metasCache[mesKey];
+}
+function metasPermitida(o){
+  if(!AUTH_ENABLED)return true;
+  if(state.perfil.papel==='admin'||(state.perfil.unidades||[]).includes('*'))return true;
+  const norm=(state.perfil.unidades||[]).map(u=>u.replace(/-/g,''));
+  return norm.includes(normH(o.nome));
+}
+async function renderMetas(){
+  const mesKey=$('mMes').value||METAS_MESES[new Date().getMonth()].key;
+  let dados;
+  try{ dados=await metasFetch(mesKey); }
+  catch(e){ $('mStatus').textContent='Erro ao ler a planilha: '+e.message; return; }
+  const carts=[...new Set(dados.lista.map(o=>o.carteira).filter(Boolean))].sort();
+  const cur=$('mCart').value;
+  $('mCart').innerHTML='<option value="">Todas as carteiras</option>'+carts.map(c=>`<option${c===cur?' selected':''}>${c}</option>`).join('');
+  const q=($('mBusca').value||'').toLowerCase(), fc=$('mCart').value;
+  const L=dados.lista.filter(o=>metasPermitida(o)&&(!q||o.nome.toLowerCase().includes(q))&&(!fc||o.carteira===fc));
+  $('mStatus').textContent=L.length+' unidade(s) · fonte: planilhas ao vivo';
+  const sum=k=>L.reduce((a,o)=>a+(+o[k]||0),0);
+  const tFat=sum('fat'),tMetaFat=sum('metaFat'),tMat=sum('mat'),tMetaMat=sum('metaMat');
+  const tAtu=sum('fatAtual'),tAnt=sum('fatAnterior');
+  const yoyT=tAnt>0?(tAtu-tAnt)/tAnt*100:null;
+  const nUp=L.filter(o=>o.yoy!=null&&o.yoy>1).length,nDn=L.filter(o=>o.yoy!=null&&o.yoy<-1).length;
+  const nNt=L.filter(o=>o.yoy!=null).length-nUp-nDn;
+  const kd=[];
+  if(dados.temCebrac){
+    kd.push({l:'Faturamento do mês',v:brl(tFat),s:'meta '+brl(tMetaFat),c:'var(--blue)'});
+    kd.push({l:'Atingimento fat.',v:tMetaFat>0?pcts(tFat/tMetaFat*100):'—',c:tFat>=tMetaFat?'var(--green)':'var(--gold-dk)'});
+    kd.push({l:'Matrículas',v:tMat||'—',s:'meta '+(tMetaMat||'—'),c:'var(--blue-dk)'});
+    kd.push({l:'Atingimento mat.',v:tMetaMat>0?pcts(tMat/tMetaMat*100):'—',c:tMat>=tMetaMat?'var(--green)':'var(--gold-dk)'});
+  }
+  kd.push({l:'Fat. total ano atual',v:brl(tAtu),s:'ano anterior '+brl(tAnt),c:'var(--blue)'});
+  kd.push({l:'Crescimento YoY',v:yoyT!=null?(yoyT>=0?'+':'')+pcts(yoyT):'—',c:yoyT>=0?'var(--green)':'var(--dn)'});
+  kd.push({l:'🟢 · 🟡 · 🔴 (YoY)',v:nUp+' · '+nNt+' · '+nDn,c:'var(--green)'});
+  $('mKpis').innerHTML=kd.map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
+  const nomeCurto=n=>n.length>15?n.slice(0,14)+'…':n;
+  // Ranking meta
+  const rm=L.filter(o=>o.atgFat!=null).sort((a,b)=>b.atgFat-a.atgFat);
+  if(rm.length){mk('cRankMeta',{type:'bar',data:{labels:rm.map(o=>nomeCurto(o.nome)),
+    datasets:[{data:rm.map(o=>+o.atgFat.toFixed(1)),backgroundColor:rm.map(o=>o.atgFat>=100?'#4BAF4F':o.atgFat>=80?'#F5C842':'#C0392B'),borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>pcts(c.raw)+' da meta'}}},
+      scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:8.5}}}}}});}
+  else kill('cRankMeta');
+  // Ranking YoY
+  const ry=L.filter(o=>o.yoy!=null).sort((a,b)=>b.yoy-a.yoy);
+  if(ry.length){mk('cRankYoY',{type:'bar',data:{labels:ry.map(o=>nomeCurto(o.nome)),
+    datasets:[{data:ry.map(o=>+o.yoy.toFixed(1)),backgroundColor:ry.map(o=>o.yoy>1?'#4BAF4F':o.yoy<-1?'#C0392B':'#C89A00'),borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>(c.raw>=0?'+':'')+pcts(c.raw)}}},
+      scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:8.5}}}}}});}
+  else kill('cRankYoY');
+  // Funil
+  const vV=sum('visitas'),vA=sum('agend'),vM=sum('mat');
+  if(dados.temCebrac&&(vV||vA||vM)){
+    const mx=Math.max(vV,vA,vM,1);
+    const linha=(lbl,val,cor,convDe)=>`<div style="display:grid;grid-template-columns:110px 1fr 120px;align-items:center;gap:10px;margin:9px 0;font-size:12px">
+      <span style="color:var(--t2)">${lbl}</span>
+      <div style="height:22px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:${val/mx*100}%;background:${cor};border-radius:6px"></div></div>
+      <span style="font-weight:700">${(val||0).toLocaleString('pt-BR')}${convDe!=null&&convDe>0?` <span style="color:var(--t3);font-weight:400">(${pcts(val/convDe*100)})</span>`:''}</span></div>`;
+    $('mFunil').innerHTML=linha('Visitas',vV,'#3D5CA8')+linha('Agendamentos',vA,'#C89A00',vV)+linha('Matrículas',vM,'#4BAF4F',vA);
+  } else $('mFunil').innerHTML='<div class="empty-state" style="padding:26px 8px">Funil disponível quando a planilha Cebrac for publicada.</div>';
+  // Donut YoY
+  mk('cDntYoY',{type:'doughnut',data:{labels:['Crescendo','Estável','Em queda'],
+    datasets:[{data:[nUp,nNt,nDn],backgroundColor:['#4BAF4F','#F5C842','#C0392B'],borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{boxWidth:9}}}}});
+  // Tabela
+  const ord=[...L].sort((a,b)=>(b.atgFat??-1)-(a.atgFat??-1));
+  const cebracCols=dados.temCebrac?'<th class="num">Meta Fat</th><th class="num">Fat</th><th class="num">% Meta</th><th class="num">Meta Mat</th><th class="num">Mat</th><th class="num">% Meta</th>':'';
+  $('mTable').innerHTML='<thead><tr><th>Unidade</th><th>Carteira</th>'+cebracCols+
+    '<th class="num">Fat ano ant.</th><th class="num">Fat ano atual</th><th class="num">Var YoY</th></tr></thead><tbody>'+
+    ord.map(o=>{
+      const cc=dados.temCebrac?`<td class="num">${brl(o.metaFat)}</td><td class="num">${brl(o.fat)}</td>
+        <td class="num">${o.atgFat!=null?`<span class="pill ${o.atgFat>=100?'up':o.atgFat>=80?'nt':'dn'}">${pcts(o.atgFat)}</span>`:'—'}</td>
+        <td class="num">${o.metaMat??'—'}</td><td class="num">${o.mat??'—'}</td>
+        <td class="num">${o.atgMat!=null?`<span class="pill ${o.atgMat>=100?'up':o.atgMat>=80?'nt':'dn'}">${pcts(o.atgMat)}</span>`:'—'}</td>`:'';
+      return`<tr><td><b>${o.nome}</b><div class="usub">${o.tamanho||''}</div></td><td>${o.carteira||'—'}</td>${cc}
+        <td class="num">${brl(o.fatAnterior)}</td><td class="num">${brl(o.fatAtual)}</td>
+        <td class="num">${o.yoy!=null?`<span class="pill ${o.yoy>1?'up':o.yoy<-1?'dn':'nt'}">${(o.yoy>=0?'+':'')+pcts(o.yoy)}</span>`:'—'}</td></tr>`;
+    }).join('')+'</tbody>';
+}
+
+/* ── Popup de média da rede (DRE) ── */
+(function(){
+  const tip=$('dretip'), tbl=$('dreTable');
+  const mv=e=>{ const x=Math.min(e.clientX+14,window.innerWidth-310), y=e.clientY+16; tip.style.left=x+'px'; tip.style.top=(y+tip.offsetHeight>window.innerHeight?e.clientY-tip.offsetHeight-10:y)+'px'; };
+  tbl.addEventListener('mouseover',e=>{ const t=e.target.closest('.tip-cell'); if(!t)return; tip.innerHTML=t.dataset.tip; tip.style.display='block'; mv(e); });
+  tbl.addEventListener('mousemove',e=>{ if(tip.style.display==='block')mv(e); });
+  tbl.addEventListener('mouseout',e=>{ if(e.target.closest('.tip-cell')&&!e.relatedTarget?.closest?.('.tip-cell'))tip.style.display='none'; });
+})();
+
+/* ================================================================
    ADMIN
 ================================================================ */
 async function renderAdmin(){
@@ -1039,13 +1256,7 @@ function goTab(v){
   $('view-'+v).classList.add('active');
   if(v==='rede')renderRede(); if(v==='dre')renderDRE();
   if(v==='comparativo')renderChips(); if(v==='admin')renderAdmin();
-  if(v==='metas'){
-    const tem=!!DASH_METAS_URL;
-    $('metasSemUrl').style.display=tem?'none':'block';
-    $('metasComUrl').style.display=tem?'block':'none';
-    if(tem){$('metasLink').href=DASH_METAS_URL;
-      if(!$('metasFrame').src||$('metasFrame').src==='about:blank')$('metasFrame').src=DASH_METAS_URL;}
-  }
+  if(v==='metas')initMetas();
 }
 </script>
 </body>
