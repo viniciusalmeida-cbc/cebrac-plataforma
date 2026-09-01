@@ -193,9 +193,9 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   </div>
     <div class="tcard"><div class="twrap">
       <table class="dt"><thead><tr>
-        <th>Unidade</th><th>Saúde</th><th class="num">Faturamento</th><th class="num">Despesas</th>
-        <th class="num">Resultado</th><th class="num">Lucrat.</th><th class="num">Matrículas</th>
-        <th class="num">Meta</th><th class="num">Inadimpl.</th></tr></thead>
+        <th>Unidade</th><th>Saúde</th><th class="num">Faturamento</th><th class="num">Desp. operacionais</th>
+        <th class="num">Resultado operacional</th><th class="num">Margem op.</th><th class="num">Não operac.</th><th class="num">Geração de caixa</th><th class="num">Matrículas</th>
+        <th class="num">Inadimpl.</th></tr></thead>
       <tbody id="redeBody"></tbody></table>
     </div></div>
   </div>
@@ -229,7 +229,9 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
       <select id="cmpCluster" onchange="renderChips()"><option value="">Todos os clusters</option></select>
       <select id="cmpMetric" onchange="renderComparativo()">
         <option value="faturamento">Faturamento</option>
-        <option value="resultado">Resultado Operacional</option>
+        <option value="resultadoOp">Resultado Operacional</option>
+        <option value="margemOp">Margem operacional %</option>
+        <option value="resultado">Geração de caixa</option>
         <option value="lucratividade">Lucratividade %</option>
         <option value="matriculas">Matrículas</option>
         <option value="inadimplencia">Inadimplência %</option>
@@ -384,7 +386,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v2.9 · outliers na rede";
+const VERSAO = "v3.0.1";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -431,10 +433,19 @@ const CATEGORIAS = ["Impostos e Taxas","Ocupação","Compras de Mercadorias","Ad
 const DRE_ESTRUTURA={
   deducoes:['Impostos e Taxas','Devoluções Financeiras'],
   variaveis:['Royalties','Fundo Cooperado','Compras de Mercadorias','MKT e Vendas - Captação Online','MKT e Vendas - Captação Offline','MKT e Vendas - Campanhas','Financeiro'],
-  fixos:['Pessoal','Encargos Sociais','Outras Despesas Com Pessoal','Ocupação','Administrativas','Pedagógico','Serviços de Terceiros','Manutenções Gerais','Insumos e Suprimentos'],
-  financeiro:['Pagamento de Financiamentos e Empréstimos','Gastos Judiciais'],
-  distribuicao:['Distribuiçoes de Lucro','Investimentos']
+  fixos:['Pessoal','Encargos Sociais','Outras Despesas Com Pessoal','Ocupação','Administrativas','Pedagógico','Serviços de Terceiros','Manutenções Gerais','Insumos e Suprimentos','Gastos Judiciais','Pagamento de Financiamentos e Empréstimos','Distribuiçoes de Lucro','Investimentos']
 };
+/* Contas NÃO operacionais — identificadas pela SUBCONTA (conta) ou pela categoria.
+   Ficam fora do Resultado Operacional e entram só na Geração de Caixa. */
+const NAO_OP_GRUPOS=['Pró-labore','Retiradas e distribuição de lucros','Empréstimos e financiamentos','Investimentos'];
+function grupoNaoOp(conta,contapai){
+  const c=String(conta||''), cp=String(contapai||'');
+  if(/pr[óo]\s*-?\s*labore/i.test(c))return 'Pró-labore';
+  if(/retirada|distribui[çc][aã]o de lucro/i.test(c)||cp==='Distribuiçoes de Lucro')return 'Retiradas e distribuição de lucros';
+  if(/empr[ée]st|financiam/i.test(c)||cp==='Pagamento de Financiamentos e Empréstimos')return 'Empréstimos e financiamentos';
+  if(cp==='Investimentos')return 'Investimentos';
+  return null;
+}
 const MKT_CATS=['MKT e Vendas - Captação Online','MKT e Vendas - Captação Offline','MKT e Vendas - Campanhas'];
 
 /* Limiar do semáforo */
@@ -537,9 +548,10 @@ function initUI(){
   // filtros de região/cluster
   const regs=[...new Set(Object.values(state.unidades).map(u=>u.carteira).filter(Boolean))].sort();
   const clus=[...new Set(Object.values(state.unidades).map(u=>u.cluster).filter(Boolean))].sort();
-  const fill=(id,vals,first)=>{$(id).innerHTML='<option value="">'+first+'</option>'+vals.map(v=>`<option>${v}</option>`).join('')};
-  fill('fRegiao',regs,'Todas as carteiras');fill('fCluster',clus,'Todos os clusters');
-  fill('cmpRegiao',regs,'Todas as carteiras');fill('cmpCluster',clus,'Todos os clusters');
+  const semCart=Object.values(state.unidades).some(u=>!u.carteira);
+  const fill=(id,vals,first,extra)=>{$(id).innerHTML='<option value="">'+first+'</option>'+vals.map(v=>`<option>${v}</option>`).join('')+(extra||'')};
+  fill('fRegiao',regs,'Todas as carteiras',semCart?'<option value="__none">— sem carteira —</option>':'');fill('fCluster',clus,'Todos os clusters');
+  fill('cmpRegiao',regs,'Todas as carteiras',semCart?'<option value="__none">— sem carteira —</option>':'');fill('cmpCluster',clus,'Todos os clusters');
   buildDespGrid();
   $('redeLoad').style.display='none'; $('redeContent').style.display='block';
   renderRede(); renderChips(); carregarFechamento();
@@ -555,15 +567,22 @@ function metr(f){
   let faturamento=(+f.receitaParcelas||0)+(+f.receitaComercial||0);
   if(!faturamento&&f.receitaTipos)faturamento=Object.values(f.receitaTipos).reduce((a,b)=>a+(+b||0),0);
   const resultado=faturamento-despTotal;
-  const soma=lst=>lst.reduce((a,c)=>a+(+((f.despesas||{})[c])||0),0);
+  const desp=f.despesas||{};
+  // não operacionais: gravados pelo importador (por subconta); fallback por categoria em dados antigos
+  let naoOp=f.naoOp, naoOpCat=f.naoOpCat;
+  if(!naoOp){ naoOp={'Retiradas e distribuição de lucros':+desp['Distribuiçoes de Lucro']||0,'Empréstimos e financiamentos':+desp['Pagamento de Financiamentos e Empréstimos']||0,'Investimentos':+desp['Investimentos']||0};
+    naoOpCat={'Distribuiçoes de Lucro':naoOp['Retiradas e distribuição de lucros'],'Pagamento de Financiamentos e Empréstimos':naoOp['Empréstimos e financiamentos'],'Investimentos':naoOp['Investimentos']}; }
+  const naoOpTotal=Object.values(naoOp).reduce((a,b)=>a+(+b||0),0);
+  const opCat=c=>Math.max((+desp[c]||0)-(+(naoOpCat||{})[c]||0),0);
+  const soma=lst=>lst.reduce((a,c)=>a+opCat(c),0);
   const deducoes=soma(DRE_ESTRUTURA.deducoes), custosVar=soma(DRE_ESTRUTURA.variaveis);
   const listados=[].concat(...Object.values(DRE_ESTRUTURA));
   const custosFixos=soma(DRE_ESTRUTURA.fixos)+soma(CATEGORIAS.filter(c=>!listados.includes(c)));
-  const financeiro=soma(DRE_ESTRUTURA.financeiro), distribuicao=soma(DRE_ESTRUTURA.distribuicao);
   const receitaLiquida=faturamento-deducoes, mc=receitaLiquida-custosVar, ebitda=mc-custosFixos;
-  const antesDist=ebitda-financeiro, mkt=soma(MKT_CATS);
-  Object.assign(f,{deducoes,custosVar,custosFixos,financeiro,distribuicao,receitaLiquida,mc,ebitda,antesDist,
+  const despOp=despTotal-naoOpTotal, resultadoOp=faturamento-despOp, mkt=soma(MKT_CATS);
+  Object.assign(f,{naoOp,naoOpCat:naoOpCat||{},naoOpTotal,opCat,despOp,deducoes,custosVar,custosFixos,receitaLiquida,mc,ebitda,resultadoOp,
     mcPct:receitaLiquida>0?mc/receitaLiquida:null, ebitdaPct:receitaLiquida>0?ebitda/receitaLiquida:null,
+    margemOp:faturamento>0?resultadoOp/faturamento:null,
     pontoEq:(receitaLiquida>0&&mc>0)?custosFixos/(mc/receitaLiquida):null,
     cac:(f.matriculas>0)?mkt/f.matriculas:null, mkt});
   return {...f, despTotal, faturamento, resultado,
@@ -578,7 +597,7 @@ function scoreDe(uid,mes){
   const f=fechDe(uid,mes); if(!f)return null;
   let s=100;
   if(f.inadimplencia!=null){ if(f.inadimplencia>=CFG.inadR)s-=40; else if(f.inadimplencia>=CFG.inadY)s-=20; }
-  if(f.resultado<0)s-=25;
+  if(f.resultadoOp<0)s-=25;
   const serie=serieDe(uid).filter(x=>x.mes<=mes);
   if(serie.length>=6){ const l3=serie.slice(-3).reduce((a,x)=>a+x.faturamento,0)/3, p3=serie.slice(-6,-3).reduce((a,x)=>a+x.faturamento,0)/3;
     if(p3>0&&(l3-p3)/p3*100<=-CFG.tendY)s-=15; }
@@ -595,7 +614,7 @@ function renderRede(){
   for(const uid of Object.keys(state.unidades)){
     const u=state.unidades[uid];
     if(q&&!u.nome.toLowerCase().includes(q))continue;
-    if(fr&&u.carteira!==fr)continue; if(fc&&u.cluster!==fc)continue;
+    if(fr==='__none'?!!u.carteira:(fr&&u.carteira!==fr))continue; if(fc&&u.cluster!==fc)continue;
     const sc=scoreDe(uid,mes);
     const manual=state.outliers.has(uid);
     const auto=!!(sc&&sc.f.faturamento>0&&sc.f.despTotal/sc.f.faturamento*100<state.minDespPct);
@@ -604,30 +623,32 @@ function renderRede(){
   rows.sort((a,b)=>{ if(a.out!==b.out)return a.out?1:-1; const sa=a.sc?a.sc.score:999, sb=b.sc?b.sc.score:999; return sa-sb; });
   const nOut=rows.filter(r=>r.out&&r.sc).length;
   const com=rows.filter(r=>r.sc&&!r.out);
-  const tFat=com.reduce((s,r)=>s+r.sc.f.faturamento,0), tDes=com.reduce((s,r)=>s+r.sc.f.despTotal,0);
-  const tRes=tFat-tDes;
+  const tFat=com.reduce((s,r)=>s+r.sc.f.faturamento,0), tDes=com.reduce((s,r)=>s+r.sc.f.despOp,0);
+  const tRes=tFat-tDes, tNaoOp=com.reduce((s,r)=>s+r.sc.f.naoOpTotal,0), tCaixa=tRes-tNaoOp;
   const nG=com.filter(r=>r.sc.sem==='g').length,nA=com.filter(r=>r.sc.sem==='a').length,nR=com.filter(r=>r.sc.sem==='r').length;
   const nRec=com.filter(r=>r.sc.f.faturamento>0).length;
   const avisoRec=nRec===0&&com.length?'⚠ só despesas neste mês — escolha outro mês':nRec+' de '+com.length+' unidades com receita';
   $('redeKpis').innerHTML=[
     {l:'Faturamento da rede · '+mLbl(mes),v:brl(tFat),s:avisoRec,c:nRec===0&&com.length?'var(--dn)':'var(--blue)'},
-    {l:'Despesas',v:brl(tDes),c:'var(--gold-dk)'},
-    {l:'Resultado',v:brl(tRes),c:tRes>=0?'var(--green)':'var(--dn)'},
-    {l:'Lucratividade',v:pct(tFat>0?tRes/tFat:null),c:'var(--blue-dk)'},
+    {l:'Despesas operacionais',v:brl(tDes),c:'var(--gold-dk)'},
+    {l:'★ Resultado operacional',v:brl(tRes),s:'margem '+pct(tFat>0?tRes/tFat:null),c:tRes>=0?'var(--green)':'var(--dn)'},
+    {l:'Não operacionais',v:brl(tNaoOp),s:'pró-labore, retiradas, empréstimos, invest.',c:'var(--t3)'},
+    {l:'Geração de caixa',v:brl(tCaixa),c:tCaixa>=0?'var(--green)':'var(--dn)'},
     {l:'🟢 · 🟡 · 🔴',v:nG+' · '+nA+' · '+nR,s:com.length+' no consolidado'+(nOut?' · '+nOut+' outlier(s) fora':''),c:'var(--green)'},
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
   $('redeCnt').textContent=rows.length+' unidade(s) · '+com.length+' no consolidado de '+mLbl(mes)+(nOut?' · '+nOut+' outlier(s)':'');
   $('redeBody').innerHTML=rows.map(r=>{
-    if(!r.sc)return`<tr style="opacity:.55"><td><span class="sem" style="background:var(--border)"></span>${r.u.nome}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td><td colspan="8" class="cnt">sem fechamento em ${mLbl(mes)}</td></tr>`;
+    if(!r.sc)return`<tr style="opacity:.55"><td><span class="sem" style="background:var(--border)"></span>${r.u.nome}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td><td colspan="9" class="cnt">sem fechamento em ${mLbl(mes)}</td></tr>`;
     const f=r.sc.f, meta=f.metaMatriculas;
     return`<tr onclick="$('dreUnit').value='${r.uid}';goTab('dre');renderDRE()" style="${r.out?'opacity:.55':''}">
       <td><span class="sem ${r.sc.sem}"></span><strong style="${r.out?'text-decoration:line-through':''}">${r.u.nome}</strong>${r.out?` <span class="pill dn sm" style="font-size:9px">${r.outMotivo}</span>`:''}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td>
       <td><span class="score-pill score-${r.sc.sem}">${r.sc.score}</span></td>
-      <td class="num">${brl(f.faturamento)}</td><td class="num">${brl(f.despTotal)}</td>
+      <td class="num">${brl(f.faturamento)}</td><td class="num">${brl(f.despOp)}</td>
+      <td class="num"><span class="pill ${f.resultadoOp>=0?'up':'dn'}">${brl(f.resultadoOp)}</span></td>
+      <td class="num">${pct(f.margemOp)}</td>
+      <td class="num" style="color:var(--t3)">${brl(f.naoOpTotal)}</td>
       <td class="num"><span class="pill ${f.resultado>=0?'up':'dn'}">${brl(f.resultado)}</span></td>
-      <td class="num">${pct(f.lucratividade)}</td>
-      <td class="num">${f.matriculas??'—'}</td>
-      <td class="num">${meta?(''+meta+' ('+Math.round((f.matriculas||0)/meta*100)+'%)'):'—'}</td>
+      <td class="num">${f.matriculas??'—'}${meta?`<div class="usub">meta ${meta}</div>`:''}</td>
       <td class="num"><span class="pill ${f.inadimplencia==null?'nt':f.inadimplencia>=CFG.inadR?'dn':f.inadimplencia>=CFG.inadY?'nt':'up'}">${pcts(f.inadimplencia)}</span></td></tr>`;
   }).join('');
 }
@@ -653,12 +674,15 @@ function renderDRE(){
   const parcial=serie.filter(f=>f.mes>last.mes&&f.faturamento===0);
   const acum=serie.reduce((s,f)=>s+f.resultado,0);
   const acumFechado=serie.filter(f=>f.mes<=last.mes).reduce((s,f)=>s+f.resultado,0);
+  const acumOpFechado=serie.filter(f=>f.mes<=last.mes).reduce((s,f)=>s+f.resultadoOp,0);
+  const semProlabore=!serie.some(f=>(f.naoOp||{})['Pró-labore']>0);
   $('dreKpis').innerHTML=[
     {l:'Faturamento · '+mLbl(last.mes),v:brl(last.faturamento),c:'var(--blue)'},
-    {l:'Resultado do mês',v:brl(last.resultado),c:last.resultado>=0?'var(--green)':'var(--dn)'},
+    {l:'★ Resultado operacional',v:brl(last.resultadoOp),s:'margem '+pct(last.margemOp),c:last.resultadoOp>=0?'var(--green)':'var(--dn)'},
+    {l:'Não operacionais',v:brl(last.naoOpTotal),s:'pró-labore, retiradas, empréstimos, invest.',c:'var(--t3)'},
+    {l:'Geração de caixa',v:brl(last.resultado),c:last.resultado>=0?'var(--green)':'var(--dn)'},
     {l:'Margem de contribuição',v:pct(last.mcPct),c:'var(--blue-dk)'},
-    {l:'Margem operacional (EBITDA)',v:pct(last.ebitdaPct),c:last.ebitdaPct>=0?'var(--green)':'var(--dn)'},
-    {l:'Resultado acumulado '+ano+' (até '+mLbl(last.mes)+')',v:brl(acumFechado),c:acumFechado>=0?'var(--green)':'var(--dn)'},
+    {l:'Res. operacional acumulado '+ano+' (até '+mLbl(last.mes)+')',v:brl(acumOpFechado),c:acumOpFechado>=0?'var(--green)':'var(--dn)'},
     {l:'Inadimplência',v:pcts(last.inadimplencia),c:last.inadimplencia>=CFG.inadR?'var(--dn)':last.inadimplencia>=CFG.inadY?'var(--gold-dk)':'var(--green)'},
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div></div>`).join('')
   +(parcial.length?`<div class="kpi" style="--kc:var(--gold-dk)"><div class="kpi-l">Atenção</div><div class="kpi-v" style="font-size:12px">${parcial.map(f=>mLbl(f.mes)).join(', ')}: só despesas</div><div class="kpi-s">receita ainda não importada — mês parcial</div></div>`:'');
@@ -682,8 +706,9 @@ function renderDRE(){
     const todos=base.filter(f=>!state.outliers.has(f.unidadeId)&&f.despTotal/f.faturamento*100>=state.minDespPct);
     const sumFat=todos.reduce((a,f)=>a+f.faturamento,0)||1;
     const med={n:todos.length,nExcl:base.length-todos.length,sumFat,pct:{}};
-    for(const c of CATEGORIAS)med.pct[c]=todos.reduce((a,f)=>a+(+((f.despesas||{})[c])||0),0)/sumFat;
-    for(const k of ['despTotal','deducoes','custosVar','custosFixos','financeiro','distribuicao','receitaLiquida','mc','ebitda','antesDist','resultado','faturamento','mkt','receitaParcelas','receitaComercial'])
+    for(const c of CATEGORIAS)med.pct[c]=todos.reduce((a,f)=>a+f.opCat(c),0)/sumFat;
+    med.pct.naoOp={};for(const g of NAO_OP_GRUPOS)med.pct.naoOp[g]=todos.reduce((a,f)=>a+(+(f.naoOp||{})[g]||0),0)/sumFat;
+    for(const k of ['despTotal','despOp','deducoes','custosVar','custosFixos','receitaLiquida','mc','ebitda','resultadoOp','naoOpTotal','resultado','faturamento','mkt','receitaParcelas','receitaComercial'])
       med.pct[k]=todos.reduce((a,f)=>a+(+f[k]||0),0)/sumFat;
     med.matr=todos.reduce((a,f)=>a+(+f.matriculas||0),0);
     med.mktTot=todos.reduce((a,f)=>a+(+f.mkt||0),0);
@@ -721,9 +746,11 @@ function renderDRE(){
   };
   const rowPct=(label,fn)=>'<tr><td style="color:var(--t3);font-style:italic">'+label+'</td>'+serie.map(f=>`<td class="num" style="color:var(--t3)">${pct(fn(f))}</td>`).join('')+'<td class="num" style="color:var(--t3)">'+pct(fn({receitaLiquida:serie.reduce((a,f)=>a+f.receitaLiquida,0),mc:serie.reduce((a,f)=>a+f.mc,0),ebitda:serie.reduce((a,f)=>a+f.ebitda,0),faturamento:serie.reduce((a,f)=>a+f.faturamento,0),resultado:serie.reduce((a,f)=>a+f.resultado,0)}))+'</td></tr>';
   const sec=t=>'<tr class="sec"><td colspan="'+(cols.length+2)+'">'+t+'</td></tr>';
-  const grupo=(titulo,cats,getMedia)=>{
+  const grupo=(titulo,cats)=>{
     tb+=sec(titulo);
-    for(const c of cats){ const vals=serie.map(f=>+((f.despesas||{})[c])||0); if(vals.every(v=>!v))continue; tb+=rowTip('  '+c,vals,med=>med.pct[c]); }
+    for(const c of cats){ const vals=serie.map(f=>f.opCat(c)); if(vals.every(v=>!v))continue;
+      const temNaoOp=serie.some(f=>(f.naoOpCat||{})[c]>0);
+      tb+=rowTip('  '+c+(temNaoOp?' <span class="usub">(parte operacional)</span>':''),vals,med=>med.pct[c]); }
   };
   const listados=[].concat(...Object.values(DRE_ESTRUTURA));
   const outros=CATEGORIAS.filter(c=>!listados.includes(c));
@@ -743,12 +770,11 @@ function renderDRE(){
   tb+=rowTip('(=) MARGEM DE CONTRIBUIÇÃO',serie.map(f=>f.mc),med=>med.pct.mc,'tot',true);
   tb+=rowPct('Margem de contribuição %',f=>f.receitaLiquida>0?f.mc/f.receitaLiquida:null);
   grupo('(−) Custos fixos',DRE_ESTRUTURA.fixos.concat(outros));
-  tb+=rowTip('(=) RESULTADO OPERACIONAL (EBITDA)',serie.map(f=>f.ebitda),med=>med.pct.ebitda,'tot',true);
-  tb+=rowPct('Margem operacional %',f=>f.receitaLiquida>0?f.ebitda/f.receitaLiquida:null);
-  grupo('(−) Financeiro e não operacional',DRE_ESTRUTURA.financeiro);
-  tb+=rowTip('(=) RESULTADO ANTES DA DISTRIBUIÇÃO',serie.map(f=>f.antesDist),med=>med.pct.antesDist,'tot',true);
-  grupo('(−) Distribuição e investimentos',DRE_ESTRUTURA.distribuicao);
-  tb+=rowTip('(=) GERAÇÃO DE CAIXA',serie.map(f=>f.resultado),med=>med.pct.resultado,'tot',true);
+  tb+=rowTip('(=) ★ RESULTADO OPERACIONAL',serie.map(f=>f.resultadoOp),med=>med.pct.resultadoOp,'tot',true);
+  tb+=rowPct('Margem operacional % (sobre receita bruta)',f=>f.faturamento>0?f.resultadoOp/f.faturamento:null);
+  tb+=sec('(−) Não operacionais — fora do resultado operacional'+(semProlabore?' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dn)">· pró-labore ainda não separado: reimporte as despesas com a versão atual</span>':''));
+  for(const g of NAO_OP_GRUPOS){ const vals=serie.map(f=>+(f.naoOp||{})[g]||0); if(vals.every(v=>!v))continue; tb+=rowTip('  '+g,vals,med=>med.pct.naoOp[g]); }
+  tb+=rowTip('(=) GERAÇÃO DE CAIXA (resultado líquido)',serie.map(f=>f.resultado),med=>med.pct.resultado,'tot',true);
   tb+=rowPct('Geração de caixa % da receita bruta',f=>f.faturamento>0?f.resultado/f.faturamento:null);
   tb+=sec('Indicadores');
   tb+='<tr><td>Ponto de equilíbrio (receita líquida mínima)</td>'+serie.map(f=>`<td class="num">${f.pontoEq!=null?brl(f.pontoEq):'—'}</td>`).join('')+'<td class="num">—</td></tr>';
@@ -761,9 +787,9 @@ function renderDRE(){
   $('dreTable').innerHTML=th+tb;
 
   mk('cDre1',{type:'bar',data:{labels:serie.map(f=>mLbl(f.mes)),datasets:[
-    {type:'line',label:'Resultado',data:serie.map(f=>f.resultado),borderColor:'#C89A00',backgroundColor:'#C89A00',tension:.35,pointRadius:2.5,borderWidth:2.5,order:0},
+    {type:'line',label:'Resultado operacional',data:serie.map(f=>f.resultadoOp),borderColor:'#C89A00',backgroundColor:'#C89A00',tension:.35,pointRadius:2.5,borderWidth:2.5,order:0},
     {label:'Faturamento',data:serie.map(f=>f.faturamento),backgroundColor:'rgba(61,92,168,.8)',borderRadius:3,order:1},
-    {label:'Despesas',data:serie.map(f=>-f.despTotal),backgroundColor:'rgba(192,57,43,.6)',borderRadius:3,order:1}]},
+    {label:'Despesas operacionais',data:serie.map(f=>-f.despOp),backgroundColor:'rgba(192,57,43,.6)',borderRadius:3,order:1}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{position:'top',align:'end',labels:{boxWidth:9,usePointStyle:true,pointStyle:'circle'}},
         tooltip:{callbacks:{label:c=>c.dataset.label+': '+brl(Math.abs(c.raw))}}},
@@ -783,7 +809,7 @@ function renderChips(){
   const fr=$('cmpRegiao').value, fc=$('cmpCluster').value;
   const uids=Object.keys(state.unidades).filter(id=>{
     const u=state.unidades[id];
-    return(!fr||u.carteira===fr)&&(!fc||u.cluster===fc);
+    return(fr==='__none'?!u.carteira:(!fr||u.carteira===fr))&&(!fc||u.cluster===fc);
   }).sort((a,b)=>state.unidades[a].nome.localeCompare(state.unidades[b].nome));
   $('cmpChips').innerHTML=uids.map(id=>`<span class="chip ${state.cmpSel.has(id)?'sel':''}" onclick="toggleChip('${id}')">${state.unidades[id].nome}</span>`).join('');
   renderComparativo();
@@ -793,14 +819,15 @@ function selTodosChips(on){
   const fr=$('cmpRegiao').value, fc=$('cmpCluster').value;
   if(!on){state.cmpSel.clear();renderChips();return;}
   Object.keys(state.unidades).forEach(id=>{ const u=state.unidades[id];
-    if((!fr||u.carteira===fr)&&(!fc||u.cluster===fc))state.cmpSel.add(id); });
+    if((fr==='__none'?!u.carteira:(!fr||u.carteira===fr))&&(!fc||u.cluster===fc))state.cmpSel.add(id); });
   renderChips();
 }
-const METRIC_LBL={faturamento:'Faturamento',resultado:'Resultado Operacional',lucratividade:'Lucratividade %',
+const METRIC_LBL={faturamento:'Faturamento',resultadoOp:'Resultado Operacional',margemOp:'Margem operacional %',resultado:'Geração de caixa',lucratividade:'Lucratividade %',
   matriculas:'Matrículas',inadimplencia:'Inadimplência %',despesasTotal:'Despesas Totais',carteiraTotal:'Carteira'};
 function metricVal(f,m){
   if(m==='despesasTotal')return f.despTotal;
   if(m==='lucratividade')return f.lucratividade!=null?f.lucratividade*100:null;
+  if(m==='margemOp')return f.margemOp!=null?f.margemOp*100:null;
   return f[m]??null;
 }
 function renderComparativo(){
@@ -810,8 +837,8 @@ function renderComparativo(){
   if(!sel.length){ kill('cCmp'); $('cmpTable').innerHTML='<tbody><tr><td class="empty-state">Selecione unidades nos chips acima.</td></tr></tbody>'; return; }
   const meses=[...new Set(Object.values(state.fech).filter(f=>sel.includes(f.unidadeId)).map(f=>f.mes))].sort();
   const palette=['#3D5CA8','#C89A00','#2E8032','#C0392B','#7B4FB6','#0E7C86','#D2691E','#8A93AD','#2E4585','#4BAF4F'];
-  const isMoney=['faturamento','resultado','despesasTotal','carteiraTotal'].includes(m);
-  const isPct=['lucratividade','inadimplencia'].includes(m);
+  const isMoney=['faturamento','resultado','resultadoOp','despesasTotal','carteiraTotal'].includes(m);
+  const isPct=['lucratividade','inadimplencia','margemOp'].includes(m);
   const datasets=sel.map((uid,i)=>({label:state.unidades[uid].nome,
     data:meses.map(mm=>{const f=fechDe(uid,mm);return f?metricVal(f,m):null}),
     borderColor:palette[i%palette.length],backgroundColor:palette[i%palette.length],
@@ -1004,7 +1031,7 @@ async function analisarArquivos(){
     const has=(...ks)=>ks.every(k=>k in H);
     const g=(r,k)=>r[H[k]];
     if(has('contapai','pagamento','valor','unidade')){          /* ── DESPESAS (coleta) ── */
-      let n=0,tot=0;
+      let n=0,tot=0,tno=0;
       for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
         const uid=resolveUid(g(r,'unidade'));if(!uid)continue;
         const d=parseData(g(r,'pagamento'));if(!d)continue;
@@ -1015,8 +1042,12 @@ async function analisarArquivos(){
         if(!CATEGORIAS.includes(cat))continue;
         const doc=docImp(uid,mes);doc.despesas=doc.despesas||{};
         doc.despesas[cat]=(doc.despesas[cat]||0)+v;n++;tot+=v;
+        const gno=grupoNaoOp(g(r,'conta'),cat);
+        if(gno){doc.naoOp=doc.naoOp||{};doc.naoOpCat=doc.naoOpCat||{};doc.naoOp[gno]=(doc.naoOp[gno]||0)+v;doc.naoOpCat[cat]=(doc.naoOpCat[cat]||0)+v;tno+=v;}
       }
-      resumo.push('✔ '+f.name+' → <b>Despesas</b>: '+n+' lançamentos, '+brl(tot));
+      // garante que docs sem não-operacionais também recebam o campo (evita fallback por categoria)
+      for(const d of Object.values(IMP.docs)){ if(d.despesas&&!d.naoOp){d.naoOp={};d.naoOpCat={};} }
+      resumo.push('✔ '+f.name+' → <b>Despesas</b>: '+n+' lançamentos, '+brl(tot)+' · não operacionais '+brl(tno));
     } else if(has('origem','unidade')&&('valorpago'in H)){       /* ── MOV FIN ── */
       let nr=0,tr=0,nd=0,td=0;
       for(let i=0;i<rows.length;i++){const r=rows[i];if(i%8000===0)await tick('Analisando '+f.name+': '+Math.round(i/rows.length*100)+'%');
@@ -1028,7 +1059,10 @@ async function analisarArquivos(){
         if(g(r,'origem')==='Receita'){doc.receitaParcelas=(doc.receitaParcelas||0)+v;nr++;tr+=v;}
         else if(g(r,'origem')==='Despesa'){
           let cat=String(g(r,'contapaicurso')||'').trim();
-          if(CATEGORIAS.includes(cat)){doc.despesas=doc.despesas||{};doc.despesas[cat]=(doc.despesas[cat]||0)+Math.abs(v);nd++;td+=Math.abs(v);}
+          if(CATEGORIAS.includes(cat)){doc.despesas=doc.despesas||{};doc.despesas[cat]=(doc.despesas[cat]||0)+Math.abs(v);nd++;td+=Math.abs(v);
+            doc.naoOp=doc.naoOp||{};doc.naoOpCat=doc.naoOpCat||{};
+            const gno=grupoNaoOp(g(r,'contaturma'),cat);
+            if(gno){doc.naoOp[gno]=(doc.naoOp[gno]||0)+Math.abs(v);doc.naoOpCat[cat]=(doc.naoOpCat[cat]||0)+Math.abs(v);}}
         }
       }
       resumo.push('✔ '+f.name+' → <b>Mov. Financeira</b>: receita '+brl(tr)+' ('+nr+') · despesas '+brl(td)+' ('+nd+')');
@@ -1126,7 +1160,7 @@ async function gravarImportacao(){
   for(const k of keys){
     const atual=state.fech[k]||{};
     const novo=IMP.docs[k];
-    state.fech[k]={...atual,...novo,despesas:{...(atual.despesas||{}),...(novo.despesas||{})}};
+    state.fech[k]={...atual,...novo,despesas:{...(atual.despesas||{}),...(novo.despesas||{})},naoOp:{...(atual.naoOp||{}),...(novo.naoOp||{})},naoOpCat:{...(atual.naoOpCat||{}),...(novo.naoOpCat||{})}};
   }
   $('impProg').textContent='Concluído: '+keys.length+' registros gravados.';
   toast('Importação concluída — '+keys.length+' unidade(s)×mês atualizados.');
@@ -1329,8 +1363,11 @@ async function outSalvar(){
 ================================================================ */
 async function renderAdmin(){
   $('admUniCnt').textContent='· '+Object.keys(state.unidades).length+' cadastradas';
-  $('admUniList').innerHTML=Object.values(state.unidades).sort((a,b)=>a.nome.localeCompare(b.nome))
-    .map(u=>`<span class="chip">${u.nome}</span>`).join('');
+  const us_=Object.values(state.unidades).sort((a,b)=>a.nome.localeCompare(b.nome));
+  const porCart={}; us_.forEach(u=>{const k=u.carteira||'(sem carteira)';(porCart[k]=porCart[k]||[]).push(u.nome);});
+  $('admUniList').innerHTML=Object.keys(porCart).sort((a,b)=>a==='(sem carteira)'?1:b==='(sem carteira)'?-1:a.localeCompare(b))
+    .map(k=>`<div style="width:100%;margin:6px 0 2px;font-size:11px;font-weight:700;color:${k==='(sem carteira)'?'var(--dn)':'var(--blue)'}">${k} · ${porCart[k].length}</div>`+
+      porCart[k].map(n=>`<span class="chip" style="${k==='(sem carteira)'?'border-color:var(--dn);color:var(--dn);background:var(--dn-bg)':''}">${n}</span>`).join('')).join('');
   try{
     const us=await db.collection('usuarios').get();
     $('admUserList').innerHTML=us.docs.map(d=>{const x=d.data();
