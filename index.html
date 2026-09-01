@@ -175,7 +175,22 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
       <select id="fRegiao" onchange="renderRede()"><option value="">Todas as carteiras</option></select>
       <select id="fCluster" onchange="renderRede()"><option value="">Todos os clusters</option></select>
       <span class="cnt" id="redeCnt"></span>
+      <button class="btn ghost" id="outBtn" onclick="$('outPanel').style.display=$('outPanel').style.display==='none'?'block':'none';renderOutliers()">Outliers</button>
     </div>
+  <div class="panel" id="outPanel" style="display:none">
+    <div class="panel-t">Unidades desconsideradas no padrão da rede</div>
+    <div class="panel-s">Unidades que não lançam as despesas corretamente distorcem os totais da rede e o padrão de comparação do DRE. Marcadas como outlier, elas continuam listadas (riscadas), mas ficam fora dos totais, do semáforo consolidado e do padrão da rede.</div>
+    <div class="filters">
+      <label class="cnt">Regra automática: excluir do mês a unidade cuja despesa total for menor que</label>
+      <input type="number" id="outMinPct" step="5" min="0" max="100" style="width:80px" onchange="renderOutliers();renderRede()"> <span class="cnt">% do faturamento</span>
+      <button class="btn ghost" onclick="outAplicarSugeridas()">Marcar as sugeridas</button>
+      <button class="btn" onclick="outSalvar()">Salvar para todos</button>
+      <span class="cnt" id="outStatus"></span>
+    </div>
+    <div class="hint" id="outSugestao" style="margin-bottom:8px"></div>
+    <div class="hint" style="margin-bottom:4px">Exclusão manual (clique para marcar/desmarcar — riscadas = fora do padrão):</div>
+    <div class="chips" id="outChips"></div>
+  </div>
     <div class="tcard"><div class="twrap">
       <table class="dt"><thead><tr>
         <th>Unidade</th><th>Saúde</th><th class="num">Faturamento</th><th class="num">Despesas</th>
@@ -192,22 +207,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <select id="dreUnit" style="min-width:230px" onchange="renderDRE()"></select>
     <select id="dreAno" onchange="renderDRE()"></select>
     <button class="btn ghost" id="dreModoBtn" onclick="state.dreModo=state.dreModo==='pct'?'rs':'pct';renderDRE()">Ver em % do faturamento</button>
-    <button class="btn ghost" id="outBtn" onclick="$('outPanel').style.display=$('outPanel').style.display==='none'?'block':'none';renderOutliers()">Outliers do padrão da rede</button>
     <span class="cnt" id="dreMeta"></span>
-  </div>
-  <div class="panel" id="outPanel" style="display:none">
-    <div class="panel-t">Unidades desconsideradas no padrão da rede</div>
-    <div class="panel-s">Unidades que não lançam as despesas corretamente distorcem a média. Elas ficam fora do cálculo do padrão (o DRE delas continua visível normalmente).</div>
-    <div class="filters">
-      <label class="cnt">Regra automática: excluir do mês a unidade cuja despesa total for menor que</label>
-      <input type="number" id="outMinPct" step="5" min="0" max="100" style="width:80px" onchange="renderOutliers();renderDRE()"> <span class="cnt">% do faturamento</span>
-      <button class="btn ghost" onclick="outAplicarSugeridas()">Marcar as sugeridas</button>
-      <button class="btn" onclick="outSalvar()">Salvar para todos</button>
-      <span class="cnt" id="outStatus"></span>
-    </div>
-    <div class="hint" id="outSugestao" style="margin-bottom:8px"></div>
-    <div class="hint" style="margin-bottom:4px">Exclusão manual (clique para marcar/desmarcar — riscadas = fora do padrão):</div>
-    <div class="chips" id="outChips"></div>
   </div>
   <div class="kpi-grid" id="dreKpis"></div>
   <div class="tcard"><div class="twrap"><table class="dt" id="dreTable"></table></div></div>
@@ -384,7 +384,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v2.9 · outliers";
+const VERSAO = "v2.9 · outliers na rede";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -597,10 +597,13 @@ function renderRede(){
     if(q&&!u.nome.toLowerCase().includes(q))continue;
     if(fr&&u.carteira!==fr)continue; if(fc&&u.cluster!==fc)continue;
     const sc=scoreDe(uid,mes);
-    rows.push({uid,u,sc});
+    const manual=state.outliers.has(uid);
+    const auto=!!(sc&&sc.f.faturamento>0&&sc.f.despTotal/sc.f.faturamento*100<state.minDespPct);
+    rows.push({uid,u,sc,out:manual||auto,outMotivo:manual?'outlier':'despesa incompleta'});
   }
-  rows.sort((a,b)=>{ const sa=a.sc?a.sc.score:999, sb=b.sc?b.sc.score:999; return sa-sb; });
-  const com=rows.filter(r=>r.sc);
+  rows.sort((a,b)=>{ if(a.out!==b.out)return a.out?1:-1; const sa=a.sc?a.sc.score:999, sb=b.sc?b.sc.score:999; return sa-sb; });
+  const nOut=rows.filter(r=>r.out&&r.sc).length;
+  const com=rows.filter(r=>r.sc&&!r.out);
   const tFat=com.reduce((s,r)=>s+r.sc.f.faturamento,0), tDes=com.reduce((s,r)=>s+r.sc.f.despTotal,0);
   const tRes=tFat-tDes;
   const nG=com.filter(r=>r.sc.sem==='g').length,nA=com.filter(r=>r.sc.sem==='a').length,nR=com.filter(r=>r.sc.sem==='r').length;
@@ -611,14 +614,14 @@ function renderRede(){
     {l:'Despesas',v:brl(tDes),c:'var(--gold-dk)'},
     {l:'Resultado',v:brl(tRes),c:tRes>=0?'var(--green)':'var(--dn)'},
     {l:'Lucratividade',v:pct(tFat>0?tRes/tFat:null),c:'var(--blue-dk)'},
-    {l:'🟢 · 🟡 · 🔴',v:nG+' · '+nA+' · '+nR,s:com.length+' com fechamento',c:'var(--green)'},
+    {l:'🟢 · 🟡 · 🔴',v:nG+' · '+nA+' · '+nR,s:com.length+' no consolidado'+(nOut?' · '+nOut+' outlier(s) fora':''),c:'var(--green)'},
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
-  $('redeCnt').textContent=rows.length+' unidade(s) · '+com.length+' com fechamento em '+mLbl(mes);
+  $('redeCnt').textContent=rows.length+' unidade(s) · '+com.length+' no consolidado de '+mLbl(mes)+(nOut?' · '+nOut+' outlier(s)':'');
   $('redeBody').innerHTML=rows.map(r=>{
     if(!r.sc)return`<tr style="opacity:.55"><td><span class="sem" style="background:var(--border)"></span>${r.u.nome}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td><td colspan="8" class="cnt">sem fechamento em ${mLbl(mes)}</td></tr>`;
     const f=r.sc.f, meta=f.metaMatriculas;
-    return`<tr onclick="$('dreUnit').value='${r.uid}';goTab('dre');renderDRE()">
-      <td><span class="sem ${r.sc.sem}"></span><strong>${r.u.nome}</strong><div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td>
+    return`<tr onclick="$('dreUnit').value='${r.uid}';goTab('dre');renderDRE()" style="${r.out?'opacity:.55':''}">
+      <td><span class="sem ${r.sc.sem}"></span><strong style="${r.out?'text-decoration:line-through':''}">${r.u.nome}</strong>${r.out?` <span class="pill dn sm" style="font-size:9px">${r.outMotivo}</span>`:''}<div class="usub">${[r.u.carteira,r.u.cluster].filter(Boolean).join(' · ')}</div></td>
       <td><span class="score-pill score-${r.sc.sem}">${r.sc.score}</span></td>
       <td class="num">${brl(f.faturamento)}</td><td class="num">${brl(f.despTotal)}</td>
       <td class="num"><span class="pill ${f.resultado>=0?'up':'dn'}">${brl(f.resultado)}</span></td>
@@ -1291,7 +1294,7 @@ async function renderMetas(){
 
 /* ── Outliers do padrão da rede ── */
 function outSugeridas(){
-  const ano=$('dreAno').value, lim=state.minDespPct;
+  const ano=($('fMes').value||'').slice(0,4)||$('dreAno').value, lim=state.minDespPct;
   const porU={};
   for(const f0 of Object.values(state.fech)){
     if(!f0.mes.startsWith(ano))continue; const f=metr(f0);
@@ -1308,13 +1311,13 @@ function renderOutliers(){
   $('outSugestao').innerHTML=sug.length?
     '<b>Sugeridas pela regra ('+state.minDespPct+'%):</b> '+sug.map(x=>`${state.unidades[x.uid].nome} <span class="mini">(${x.baixo}/${x.meses} meses, mín. ${pcts(x.pctMin)})</span>`).join(' · ')+
     '<br><span class="mini">A regra automática já tira essas unidades dos meses em que a despesa ficou abaixo do limite; marcá-las exclui em todos os meses.</span>'
-    :'Nenhuma unidade abaixo do limite em '+$('dreAno').value+'.';
+    :'Nenhuma unidade abaixo do limite em '+(($('fMes').value||'').slice(0,4))+'.';
   const ids=Object.keys(state.unidades).sort((a,b)=>state.unidades[a].nome.localeCompare(state.unidades[b].nome));
   $('outChips').innerHTML=ids.map(id=>`<span class="chip${state.outliers.has(id)?' sel':''}" style="${state.outliers.has(id)?'text-decoration:line-through;background:var(--dn);border-color:var(--dn)':''}" onclick="outToggle('${id}')">${state.unidades[id].nome}</span>`).join('');
   $('outStatus').textContent=state.outliers.size+' excluída(s) manualmente';
 }
-function outToggle(id){ state.outliers.has(id)?state.outliers.delete(id):state.outliers.add(id); renderOutliers(); renderDRE(); }
-function outAplicarSugeridas(){ outSugeridas().forEach(x=>state.outliers.add(x.uid)); renderOutliers(); renderDRE(); }
+function outToggle(id){ state.outliers.has(id)?state.outliers.delete(id):state.outliers.add(id); renderOutliers(); renderRede(); }
+function outAplicarSugeridas(){ outSugeridas().forEach(x=>state.outliers.add(x.uid)); renderOutliers(); renderRede(); }
 async function outSalvar(){
   try{ await db.collection('config').doc('dre').set({outliers:[...state.outliers],minDespPct:state.minDespPct,salvoPor:state.user.email,salvoEm:new Date().toISOString()});
     toast('Outliers salvos — valem para todos os usuários.'); }
