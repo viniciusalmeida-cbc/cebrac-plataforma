@@ -368,6 +368,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
+const VERSAO = "v2.7 · DRE gerencial";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -410,6 +411,16 @@ const CATEGORIAS = ["Impostos e Taxas","Ocupação","Compras de Mercadorias","Ad
 "Pagamento de Financiamentos e Empréstimos","Devoluções Financeiras","Gastos Judiciais",
 "Distribuiçoes de Lucro","Investimentos"];
 
+/* Estrutura do DRE gerencial — grupos das categorias de despesa */
+const DRE_ESTRUTURA={
+  deducoes:['Impostos e Taxas','Devoluções Financeiras'],
+  variaveis:['Royalties','Fundo Cooperado','Compras de Mercadorias','MKT e Vendas - Captação Online','MKT e Vendas - Captação Offline','MKT e Vendas - Campanhas','Financeiro'],
+  fixos:['Pessoal','Encargos Sociais','Outras Despesas Com Pessoal','Ocupação','Administrativas','Pedagógico','Serviços de Terceiros','Manutenções Gerais','Insumos e Suprimentos'],
+  financeiro:['Pagamento de Financiamentos e Empréstimos','Gastos Judiciais'],
+  distribuicao:['Distribuiçoes de Lucro','Investimentos']
+};
+const MKT_CATS=['MKT e Vendas - Captação Online','MKT e Vendas - Captação Offline','MKT e Vendas - Campanhas'];
+
 /* Limiar do semáforo */
 const CFG = { inadY:8, inadR:15, tendY:10, scoreG:75, scoreA:50 };
 
@@ -445,7 +456,7 @@ if(!AUTH_ENABLED){
   state.user={email:'acesso-aberto'};
   state.perfil={papel:'admin',unidades:['*']};
   $('loginView').style.display='none'; $('appView').style.display='block';
-  $('barUser').textContent='acesso aberto (sem login)';
+  $('barUser').textContent='acesso aberto (sem login) · '+VERSAO;
   $('tabAdmin').style.display='';
   carregarTudo().catch(e=>toast('Erro ao carregar: '+e.message));
 }
@@ -458,7 +469,7 @@ auth.onAuthStateChanged(async user=>{
     if(!doc.exists){ showLoginErr('Seu e-mail ('+user.email+') ainda não foi liberado pelo administrador.'); auth.signOut(); return; }
     state.perfil=doc.data();
     $('loginView').style.display='none'; $('appView').style.display='block';
-    $('barUser').textContent=user.email+(state.perfil.papel==='admin'?' · admin':'');
+    $('barUser').textContent=user.email+(state.perfil.papel==='admin'?' · admin':'')+' · '+VERSAO;
     $('tabAdmin').style.display=state.perfil.papel==='admin'?'':'none';
     await carregarTudo();
   }catch(e){ showLoginErr('Erro ao verificar permissões: '+e.message); }
@@ -526,6 +537,17 @@ function metr(f){
   let faturamento=(+f.receitaParcelas||0)+(+f.receitaComercial||0);
   if(!faturamento&&f.receitaTipos)faturamento=Object.values(f.receitaTipos).reduce((a,b)=>a+(+b||0),0);
   const resultado=faturamento-despTotal;
+  const soma=lst=>lst.reduce((a,c)=>a+(+((f.despesas||{})[c])||0),0);
+  const deducoes=soma(DRE_ESTRUTURA.deducoes), custosVar=soma(DRE_ESTRUTURA.variaveis);
+  const listados=[].concat(...Object.values(DRE_ESTRUTURA));
+  const custosFixos=soma(DRE_ESTRUTURA.fixos)+soma(CATEGORIAS.filter(c=>!listados.includes(c)));
+  const financeiro=soma(DRE_ESTRUTURA.financeiro), distribuicao=soma(DRE_ESTRUTURA.distribuicao);
+  const receitaLiquida=faturamento-deducoes, mc=receitaLiquida-custosVar, ebitda=mc-custosFixos;
+  const antesDist=ebitda-financeiro, mkt=soma(MKT_CATS);
+  Object.assign(f,{deducoes,custosVar,custosFixos,financeiro,distribuicao,receitaLiquida,mc,ebitda,antesDist,
+    mcPct:receitaLiquida>0?mc/receitaLiquida:null, ebitdaPct:receitaLiquida>0?ebitda/receitaLiquida:null,
+    pontoEq:(receitaLiquida>0&&mc>0)?custosFixos/(mc/receitaLiquida):null,
+    cac:(f.matriculas>0)?mkt/f.matriculas:null, mkt});
   return {...f, despTotal, faturamento, resultado,
     lucratividade: faturamento>0?resultado/faturamento:null,
     inadimplencia:(f.carteiraTotal>0&&f.carteiraVencida!=null)?f.carteiraVencida/f.carteiraTotal*100:null};
@@ -613,7 +635,8 @@ function renderDRE(){
   $('dreKpis').innerHTML=[
     {l:'Faturamento · '+mLbl(last.mes),v:brl(last.faturamento),c:'var(--blue)'},
     {l:'Resultado do mês',v:brl(last.resultado),c:last.resultado>=0?'var(--green)':'var(--dn)'},
-    {l:'Lucratividade',v:pct(last.lucratividade),c:'var(--blue-dk)'},
+    {l:'Margem de contribuição',v:pct(last.mcPct),c:'var(--blue-dk)'},
+    {l:'Margem operacional (EBITDA)',v:pct(last.ebitdaPct),c:last.ebitdaPct>=0?'var(--green)':'var(--dn)'},
     {l:'Resultado acumulado '+ano+' (até '+mLbl(last.mes)+')',v:brl(acumFechado),c:acumFechado>=0?'var(--green)':'var(--dn)'},
     {l:'Inadimplência',v:pcts(last.inadimplencia),c:last.inadimplencia>=CFG.inadR?'var(--dn)':last.inadimplencia>=CFG.inadY?'var(--gold-dk)':'var(--green)'},
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div></div>`).join('')
@@ -628,23 +651,15 @@ function renderDRE(){
     return`<tr class="${cls}"><td>${label}</td>`+vals.map(v=>`<td class="num">${fmt(v)}</td>`).join('')+`<td class="num"><b>${fmt(tot)}</b></td></tr>`;
   };
   let tb='<tbody>';
-  tb+=row('(+) Matrículas',serie.map(f=>f.matriculas),v=>v??'—');
-  tb+=row('Meta de matrículas',serie.map(f=>f.metaMatriculas),v=>v??'—');
-  tb+=row('(+) Receita de Parcelas',serie.map(f=>+f.receitaParcelas||0),brl);
-  tb+=row('(+) Receita Comercial',serie.map(f=>+f.receitaComercial||0),brl);
-  tb+=row('(=) FATURAMENTO',serie.map(f=>f.faturamento),brl,'tot');
-  const tipos=[...new Set(serie.flatMap(f=>Object.keys(f.receitaTipos||{})))].sort();
-  if(tipos.length){
-    tb+='<tr class="sec"><td colspan="'+(cols.length+2)+'">Abertura da receita por tipo de recebimento (caixa)</td></tr>';
-    for(const t of tipos)tb+=row('  '+t,serie.map(f=>+((f.receitaTipos||{})[t])||0),brl);
-  }
   // ── Média da rede por mês (unidades com despesa no mês) ──
   const redeMes={};
   for(const m of cols){
     const todos=Object.values(state.fech).filter(f=>f.mes===m).map(metr).filter(f=>f.despTotal>0);
     const n=todos.length||1;
-    const med={n:todos.length,fat:todos.reduce((a,f)=>a+f.faturamento,0)/n,despTotal:todos.reduce((a,f)=>a+f.despTotal,0)/n,cat:{}};
+    const med={n:todos.length,fat:todos.reduce((a,f)=>a+f.faturamento,0)/n,cat:{}};
     for(const c of CATEGORIAS)med.cat[c]=todos.reduce((a,f)=>a+(+((f.despesas||{})[c])||0),0)/n;
+    for(const k of ['despTotal','deducoes','custosVar','custosFixos','financeiro','distribuicao','receitaLiquida','mc','ebitda','antesDist','resultado','faturamento','mkt','receitaParcelas','receitaComercial','matriculas'])
+      med[k]=todos.reduce((a,f)=>a+(+f[k]||0),0)/n;
     redeMes[m]=med;
   }
   const tipHtml=(label,m,val,media,fatU,fatR,n)=>{
@@ -654,29 +669,57 @@ function renderDRE(){
       `Esta unidade: ${brl(val)}${dif!=null?' <span style="color:'+(dif>0?'#FF8A80':'#9BE7A0')+'">('+(dif>=0?'+':'')+pcts(dif)+' vs média)</span>':''}<br>`+
       `<span class="mini">% da receita — rede ${pR!=null?pcts(pR):'—'} · unidade ${pU!=null?pcts(pU):'—'}</span>`;
   };
-  const rowTip=(label,vals,getMedia,cls='')=>{
+  // linha com popup de média da rede; invert=true => acima da média é BOM (receitas/margens)
+  const rowTip=(label,vals,getMedia,cls='',invert=false,fmt=brl)=>{
     const tot=vals.reduce((a,v)=>a+(v||0),0);
     let h=`<tr class="${cls}"><td>${label}</td>`;
     vals.forEach((v,i)=>{
       const m=cols[i], med=redeMes[m], media=getMedia(med);
       const dif=media>0?(v-media)/media*100:null;
-      const c=dif==null?'':dif>15?'acima':dif<-15?'abaixo':'';
-      const tip=tipHtml(label.replace(/^\(-\) /,''),m,v,media,serie[i].faturamento,med.fat,med.n).replace(/"/g,'&quot;');
-      h+=`<td class="num"><span class="tip-cell ${c}" data-tip="${tip}">${brl(v)}</span></td>`;
+      let c=''; if(dif!=null){ if(dif>15)c=invert?'abaixo':'acima'; else if(dif<-15)c=invert?'acima':'abaixo'; }
+      const tip=tipHtml(label.replace(/^\([+\-=]\) /,''),m,v,media,serie[i].faturamento,med.fat,med.n).replace(/"/g,'&quot;');
+      h+=`<td class="num"><span class="tip-cell ${c}" data-tip="${tip}">${fmt(v)}</span></td>`;
     });
-    return h+`<td class="num"><b>${brl(tot)}</b></td></tr>`;
+    return h+`<td class="num"><b>${fmt(tot)}</b></td></tr>`;
   };
-  tb+='<tr class="sec"><td colspan="'+(cols.length+2)+'">Despesas por categoria <span style="font-weight:400;text-transform:none;letter-spacing:0">· passe o mouse para ver a média da rede (vermelho = 15% acima da média · verde = 15% abaixo)</span></td></tr>';
-  for(const c of CATEGORIAS){
-    const vals=serie.map(f=>+((f.despesas||{})[c])||0);
-    if(vals.every(v=>!v))continue;
-    tb+=rowTip(c,vals,med=>med.cat[c]);
-  }
-  tb+=rowTip('(-) DESPESAS TOTAIS',serie.map(f=>f.despTotal),med=>med.despTotal,'tot');
-  tb+=row('(=) RESULTADO OPERACIONAL',serie.map(f=>f.resultado),v=>v==null?'—':`<span class="pill ${v>=0?'up':'dn'}">${brl(v)}</span>`,'tot');
-  tb+='<tr><td>Lucratividade %</td>'+serie.map(f=>`<td class="num">${pct(f.lucratividade)}</td>`).join('')+`<td class="num">${pct(serie.reduce((s,f)=>s+f.faturamento,0)>0?acum/serie.reduce((s,f)=>s+f.faturamento,0):null)}</td></tr>`;
+  const rowPct=(label,fn)=>'<tr><td style="color:var(--t3);font-style:italic">'+label+'</td>'+serie.map(f=>`<td class="num" style="color:var(--t3)">${pct(fn(f))}</td>`).join('')+'<td class="num" style="color:var(--t3)">'+pct(fn({receitaLiquida:serie.reduce((a,f)=>a+f.receitaLiquida,0),mc:serie.reduce((a,f)=>a+f.mc,0),ebitda:serie.reduce((a,f)=>a+f.ebitda,0),faturamento:serie.reduce((a,f)=>a+f.faturamento,0),resultado:serie.reduce((a,f)=>a+f.resultado,0)}))+'</td></tr>';
+  const sec=t=>'<tr class="sec"><td colspan="'+(cols.length+2)+'">'+t+'</td></tr>';
+  const grupo=(titulo,cats,getMedia)=>{
+    tb+=sec(titulo);
+    for(const c of cats){ const vals=serie.map(f=>+((f.despesas||{})[c])||0); if(vals.every(v=>!v))continue; tb+=rowTip('  '+c,vals,med=>med.cat[c]); }
+  };
+  const listados=[].concat(...Object.values(DRE_ESTRUTURA));
+  const outros=CATEGORIAS.filter(c=>!listados.includes(c));
+
+  tb+=sec('Comercial');
+  tb+=row('Matrículas',serie.map(f=>f.matriculas),v=>v??'—');
+  tb+=row('Meta de matrículas',serie.map(f=>f.metaMatriculas),v=>v??'—');
+  tb+=sec('Receita bruta (regime de caixa) <span style="font-weight:400;text-transform:none;letter-spacing:0">· passe o mouse ou clique nos valores para ver a média da rede · vermelho = 15% pior que a rede · verde = 15% melhor</span>');
+  tb+=rowTip('(+) Receita de Parcelas',serie.map(f=>+f.receitaParcelas||0),med=>med.receitaParcelas,'',true);
+  tb+=rowTip('(+) Receita Comercial e Recuperação',serie.map(f=>+f.receitaComercial||0),med=>med.receitaComercial,'',true);
+  const tipos=[...new Set(serie.flatMap(f=>Object.keys(f.receitaTipos||{})))].sort();
+  for(const t of tipos)tb+=row('    '+t,serie.map(f=>+((f.receitaTipos||{})[t])||0),brl);
+  tb+=rowTip('(=) RECEITA BRUTA',serie.map(f=>f.faturamento),med=>med.faturamento,'tot',true);
+  grupo('(−) Deduções',DRE_ESTRUTURA.deducoes);
+  tb+=rowTip('(=) RECEITA LÍQUIDA',serie.map(f=>f.receitaLiquida),med=>med.receitaLiquida,'tot',true);
+  grupo('(−) Custos variáveis',DRE_ESTRUTURA.variaveis);
+  tb+=rowTip('(=) MARGEM DE CONTRIBUIÇÃO',serie.map(f=>f.mc),med=>med.mc,'tot',true);
+  tb+=rowPct('Margem de contribuição %',f=>f.receitaLiquida>0?f.mc/f.receitaLiquida:null);
+  grupo('(−) Custos fixos',DRE_ESTRUTURA.fixos.concat(outros));
+  tb+=rowTip('(=) RESULTADO OPERACIONAL (EBITDA)',serie.map(f=>f.ebitda),med=>med.ebitda,'tot',true);
+  tb+=rowPct('Margem operacional %',f=>f.receitaLiquida>0?f.ebitda/f.receitaLiquida:null);
+  grupo('(−) Financeiro e não operacional',DRE_ESTRUTURA.financeiro);
+  tb+=rowTip('(=) RESULTADO ANTES DA DISTRIBUIÇÃO',serie.map(f=>f.antesDist),med=>med.antesDist,'tot',true);
+  grupo('(−) Distribuição e investimentos',DRE_ESTRUTURA.distribuicao);
+  tb+=rowTip('(=) GERAÇÃO DE CAIXA',serie.map(f=>f.resultado),med=>med.resultado,'tot',true);
+  tb+=rowPct('Geração de caixa % da receita bruta',f=>f.faturamento>0?f.resultado/f.faturamento:null);
+  tb+=sec('Indicadores');
+  tb+='<tr><td>Ponto de equilíbrio (receita líquida mínima)</td>'+serie.map(f=>`<td class="num">${f.pontoEq!=null?brl(f.pontoEq):'—'}</td>`).join('')+'<td class="num">—</td></tr>';
+  tb+='<tr><td>Folga sobre o ponto de equilíbrio</td>'+serie.map(f=>`<td class="num">${f.pontoEq!=null&&f.receitaLiquida>0?`<span class="pill ${f.receitaLiquida>=f.pontoEq?'up':'dn'}">${pcts((f.receitaLiquida-f.pontoEq)/f.pontoEq*100)}</span>`:'—'}</td>`).join('')+'<td class="num">—</td></tr>';
+  tb+=rowTip('CAC (MKT ÷ matrículas)',serie.map(f=>f.cac||0),med=>med.matriculas>0?med.mkt/med.matriculas:0,'',false);
+  tb+=rowPct('Pessoal + encargos % da receita',f=>f.faturamento>0?((f.despesas||{})['Pessoal']||0)/f.faturamento+((f.despesas||{})['Encargos Sociais']||0)/f.faturamento:null);
+  tb+=rowPct('Ocupação % da receita',f=>f.faturamento>0?((f.despesas||{})['Ocupação']||0)/f.faturamento:null);
   tb+='<tr><td>Inadimplência %</td>'+serie.map(f=>`<td class="num">${pcts(f.inadimplencia)}</td>`).join('')+'<td class="num">—</td></tr>';
-  tb+='<tr><td>Cobrança do mês %</td>'+serie.map(f=>`<td class="num">${f.cobrancaAtual!=null?pcts(+f.cobrancaAtual):'—'}</td>`).join('')+'<td class="num">—</td></tr>';
   tb+='</tbody>';
   $('dreTable').innerHTML=th+tb;
 
@@ -1198,13 +1241,18 @@ async function renderMetas(){
     }).join('')+'</tbody>';
 }
 
-/* ── Popup de média da rede (DRE) ── */
+/* ── Popup de média da rede (DRE): mouse ou clique ── */
 (function(){
-  const tip=$('dretip'), tbl=$('dreTable');
-  const mv=e=>{ const x=Math.min(e.clientX+14,window.innerWidth-310), y=e.clientY+16; tip.style.left=x+'px'; tip.style.top=(y+tip.offsetHeight>window.innerHeight?e.clientY-tip.offsetHeight-10:y)+'px'; };
-  tbl.addEventListener('mouseover',e=>{ const t=e.target.closest('.tip-cell'); if(!t)return; tip.innerHTML=t.dataset.tip; tip.style.display='block'; mv(e); });
-  tbl.addEventListener('mousemove',e=>{ if(tip.style.display==='block')mv(e); });
-  tbl.addEventListener('mouseout',e=>{ if(e.target.closest('.tip-cell')&&!e.relatedTarget?.closest?.('.tip-cell'))tip.style.display='none'; });
+  const tip=$('dretip');
+  let fixo=false;
+  const pos=e=>{ const x=Math.min(e.clientX+14,window.innerWidth-310), y=e.clientY+16;
+    tip.style.left=x+'px'; tip.style.top=(y+tip.offsetHeight>window.innerHeight?Math.max(6,e.clientY-tip.offsetHeight-10):y)+'px'; };
+  const show=(t,e)=>{ tip.innerHTML=t.dataset.tip+(fixo?'<div class="mini" style="margin-top:4px">clique fora para fechar</div>':''); tip.style.display='block'; pos(e); };
+  document.addEventListener('mouseover',e=>{ if(fixo)return; const t=e.target.closest('.tip-cell'); if(t)show(t,e); });
+  document.addEventListener('mousemove',e=>{ if(!fixo&&tip.style.display==='block')pos(e); });
+  document.addEventListener('mouseout',e=>{ if(fixo)return; if(e.target.closest&&e.target.closest('.tip-cell'))tip.style.display='none'; });
+  document.addEventListener('click',e=>{ const t=e.target.closest('.tip-cell');
+    if(t){ fixo=true; show(t,e); e.stopPropagation(); } else { fixo=false; tip.style.display='none'; } });
 })();
 
 /* ================================================================
