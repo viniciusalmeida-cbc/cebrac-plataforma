@@ -119,6 +119,14 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 .msel-pop label:hover{background:var(--blue-lt)}
 .msel-acts{font-size:11px;color:var(--blue);padding:2px 4px 7px;border-bottom:1px solid var(--border);margin-bottom:5px}
 .msel-acts a{cursor:pointer;font-weight:600}
+.com-wrap{display:grid;grid-template-columns:170px 1fr;gap:14px;align-items:start}
+.com-sb{position:sticky;top:64px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:8px;box-shadow:var(--sh)}
+.sb-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:500;color:var(--t2);transition:.13s}
+.sb-item:hover{background:var(--blue-lt);color:var(--blue-dk)}
+.sb-item.active{background:var(--blue);color:#fff;font-weight:600}
+.crow.c2e{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:1100px){.crow.c2e{grid-template-columns:1fr}}
+@media(max-width:900px){.com-wrap{grid-template-columns:1fr}.com-sb{position:static;display:flex;flex-wrap:wrap;gap:4px}}
 .acc-grid{display:grid;grid-template-columns:1.2fr .8fr 1fr auto;gap:10px;align-items:end}
 @media(max-width:860px){.acc-grid{grid-template-columns:1fr}}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--t1);color:#fff;padding:11px 17px;border-radius:10px;font-size:12px;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:900}
@@ -359,7 +367,6 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <div class="msel" id="msMCart"></div>
     <input type="text" id="mBusca" placeholder="Buscar unidade…" oninput="renderMetas()">
     <span class="cnt" id="mStatus"></span>
-    <a class="btn ghost" id="mLinkClassico" href="#" target="_blank" style="text-decoration:none;display:none">Versão clássica ↗</a>
   </div>
   <div id="mAvisoCebrac" class="panel" style="display:none">
     <div class="hint">⚠ A planilha <b>Cebrac (metas/funil)</b> ainda não está publicada — mostrando apenas o lado de <b>crescimento ano × ano</b>. Para habilitar metas, funil e projeções: abra a planilha Cebrac → Arquivo → Compartilhar → Publicar na web → CSV → cole o link (até /pub) em <b>METAS_CFG.cebracBase</b> no index.html.</div>
@@ -397,27 +404,18 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
       <span class="cnt" id="comStatus"></span>
     </div>
     <div class="hint" id="comModoTxt" style="margin-bottom:10px"></div>
-    <div class="kpi-grid" id="comKpis"></div>
-    <div class="crow c2">
-      <div class="cc"><div class="cc-t">Matrículas por mês — comparativo anual</div><div class="cc-s">regra do dash: válidas (sem anulado/cancelado/pré/transferência)</div>
-        <div class="chart-box tall"><canvas id="cComAnual"></canvas></div></div>
-      <div class="cc"><div class="cc-t">Origem (Mídia)</div><div class="cc-s">participação nas matrículas do filtro</div>
-        <div class="chart-box tall"><canvas id="cComMidia"></canvas></div></div>
-    </div>
-    <div class="crow c2">
-      <div class="cc"><div class="cc-t">Top unidades</div><div class="cc-s">matrículas no filtro atual</div>
-        <div class="chart-box"><canvas id="cComTopU"></canvas></div></div>
-      <div class="cc"><div class="cc-t">Composição de perdas</div><div class="cc-s">anulado · cancelado · pré-matrícula (status)</div>
-        <div class="chart-box"><canvas id="cComPerdas"></canvas></div></div>
-    </div>
-    <div class="crow c2">
-      <div class="cc"><div class="cc-t">Top cursos</div>
-        <div class="chart-box"><canvas id="cComCurso"></canvas></div></div>
-      <div class="cc"><div class="cc-t">Retroalimentar o banco</div>
-        <div class="cc-s">Grava matrículas válidas e ticket médio por unidade × mês nos fechamentos — abastece o DRE, a Visão Rede e o Painel.</div>
-        <div class="btn-row"><button class="btn gold" onclick="comAlimentarBanco()">Gravar matrículas no banco</button><span class="cnt" id="comFeedStatus"></span></div>
-        <div class="hint" id="comFeedDet" style="margin-top:8px"></div>
-      </div>
+    <div class="com-wrap">
+      <nav class="com-sb" id="comSb">
+        <div class="sb-item active" data-sec="visao" onclick="comSec('visao')">📊 Visão Geral</div>
+        <div class="sb-item" data-sec="financeiro" onclick="comSec('financeiro')">💰 Financeiro</div>
+        <div class="sb-item" data-sec="matriculas" onclick="comSec('matriculas')">📋 Matrículas</div>
+        <div class="sb-item" data-sec="unidades" onclick="comSec('unidades')">🏢 Unidades</div>
+        <div class="sb-item" data-sec="equipe" onclick="comSec('equipe')">🤝 Equipe Comercial</div>
+        <div class="sb-item" data-sec="perdas" onclick="comSec('perdas')">⚠️ Perdas</div>
+        <div class="sb-item" data-sec="marketing" onclick="comSec('marketing')">📣 Marketing</div>
+        <div class="sb-item" data-sec="banco" onclick="comSec('banco')">💾 Banco de dados</div>
+      </nav>
+      <div id="comSecBox"></div>
     </div>
   </div>
 </div>
@@ -480,7 +478,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.4 · módulo comercial";
+const VERSAO = "v3.5 · comercial com menu lateral";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -1319,7 +1317,6 @@ function initMetas(){
     META_INIT=true;
     const mesAtual=new Date().getMonth()+1;
     $('mMes').innerHTML=METAS_MESES.map(m=>`<option value="${m.key}"${m.ordem===mesAtual?' selected':''}>${m.label}</option>`).join('');
-    if(DASH_METAS_URL){$('mLinkClassico').style.display='';$('mLinkClassico').href=DASH_METAS_URL;}
     $('mAvisoCebrac').style.display=METAS_CFG.cebracBase?'none':'block';
   }
   renderMetas();
@@ -1555,9 +1552,10 @@ async function admSalvarUsuarios(){
 /* ================================================================
    COMERCIAL — base de matrículas 3 anos (regras do Dash Comercial)
 ================================================================ */
-const COM={rows:null,modo:'m',f:{ano:new Set(),uni:new Set(),cart:new Set(),curso:new Set(),midia:new Set()}};
+const COM={rows:null,modo:'m',sec:'visao',lastCharts:[],f:{ano:new Set(),uni:new Set(),cart:new Set(),curso:new Set(),midia:new Set()}};
 const COM_PERDA=['anulado','cancelado','cancela','pre matricula','pre-matricula'];
 const COM_NA=['#n/d','#n/a','n/d','n/a','#div/0!','#ref!','#value!','null','undefined','-'];
+const COM_BADN=['nao tem','não tem','naotem','.','..','...'];
 const comNrm=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
 function comHead(h){return h.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9 _]/g,' ').replace(/\s+/g,' ').trim().replace(/ /g,'_');}
 function comClean(v){if(v==null)return'';const t=String(v).trim();return COM_NA.includes(t.toLowerCase())?'':t;}
@@ -1570,6 +1568,13 @@ function comUnidadeValida(v){
   if((v.match(/,/g)||[]).length>=2)return false;
   return true;
 }
+function comBomNome(v){
+  if(!v)return false;const t=comNrm(v);
+  if(!t||t.length<=1)return false;
+  if(/^[.\s\-_,]+$/.test(String(v).trim()))return false;
+  if(COM_BADN.includes(t)||t==='nao informado')return false;
+  return true;
+}
 function comValida(r){
   const st=comNrm(r.status), tc=comNrm(r.tipoContrato);
   if(COM_PERDA.some(p=>st.includes(comNrm(p))))return false;
@@ -1577,36 +1582,49 @@ function comValida(r){
   return true;
 }
 function comPerda(r){const st=comNrm(r.status);return COM_PERDA.some(p=>st.includes(comNrm(p)));}
+
 async function comLoad(){
   if(COM.rows)return COM.rows;
-  const rows=[];
   const anos=Object.keys(COM_CFG.anos);
-  for(let i=0;i<anos.length;i++){
-    const ano=anos[i];
-    $('comLoadTxt').textContent='Carregando '+ano+'… ('+(i+1)+'/'+anos.length+')';
+  let prontos=0;
+  const upd=()=>{$('comLoadTxt').textContent='Carregando base comercial… '+prontos+'/'+anos.length+' anos';};
+  upd();
+  // ★ paralelo: os 3 anos ao mesmo tempo
+  const jobs=anos.map(async ano=>{
     try{
       const r=await fetch(COM_CFG.base+'?gid='+COM_CFG.anos[ano]+'&single=true&output=csv&t='+Date.now(),{cache:'no-store'});
       if(!r.ok)throw new Error('HTTP '+r.status);
-      let t=await r.text(); if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
-      const lines=t.replace(/\r/g,'').split('\n').filter(l=>l.trim());
-      if(lines.length<2)continue;
-      const sep=lines[0].split(';').length>lines[0].split(',').length?';':',';
-      const H=csvSplit(lines[0],sep).map(comHead);
-      const ix=n=>H.indexOf(n);
-      const I={uni:ix('Unidade'),data:ix('Data'),st:ix('Status'),cur:ix('Curso'),vc:ix('Valor_Calculado'),
-        vp:ix('Valor_Total_Pago'),mid:ix('Midia'),cart:ix('Carteira'),clus:ix('Cluster'),tc:ix('Tipo_Contrato'),ev:ix('Evento')};
-      for(let j=1;j<lines.length;j++){
-        const c=csvSplit(lines[j],sep); if(c.length<3)continue;
-        const uni=comClean(c[I.uni]); if(!comUnidadeValida(uni))continue;
-        const d=parseData(comClean(c[I.data]));
-        rows.push({ano:+ano,uni,mes:d?mesDe(d):null,mesN:d?d.getMonth():null,
-          status:comClean(c[I.st])||'Não informado',curso:comClean(c[I.cur])||'Não informado',
-          midia:comClean(c[I.mid])||'Não informado',carteira:comClean(c[I.cart])||'',cluster:comClean(c[I.clus])||'',
-          tipoContrato:comClean(c[I.tc])||'',
-          vc:nBR(comClean(c[I.vc]))||0, vp:nBR(comClean(c[I.vp]))||0});
-      }
-    }catch(e){console.warn('comercial',ano,e.message);}
-    await tick();
+      const t=await r.text(); prontos++; upd();
+      return {ano:+ano,text:t};
+    }catch(e){prontos++;upd();console.warn('comercial',ano,e.message);return {ano:+ano,text:''};}
+  });
+  const res=await Promise.all(jobs);
+  const rows=[];
+  for(const {ano,text} of res){
+    if(!text)continue;
+    let t=text; if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+    const lines=t.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+    if(lines.length<2)continue;
+    const sep=lines[0].split(';').length>lines[0].split(',').length?';':',';
+    const H=csvSplit(lines[0],sep).map(comHead);
+    const ix=n=>H.indexOf(n);
+    const I={uni:ix('Unidade'),data:ix('Data'),st:ix('Status'),cur:ix('Curso'),vc:ix('Valor_Calculado'),
+      vp:ix('Valor_Total_Pago'),mid:ix('Midia'),cart:ix('Carteira'),clus:ix('Cluster'),tc:ix('Tipo_Contrato'),
+      ev:ix('Evento'),cap:ix('Captador'),ori:ix('Orientador'),esc:ix('Escolaridade'),ida:ix('Idade')};
+    for(let j=1;j<lines.length;j++){
+      const c=csvSplit(lines[j],sep); if(c.length<3)continue;
+      const uni=comClean(c[I.uni]); if(!comUnidadeValida(uni))continue;
+      const d=parseData(comClean(c[I.data]));
+      const idade=parseInt(comClean(c[I.ida]));
+      rows.push({ano,uni,mes:d?mesDe(d):null,mesN:d?d.getMonth():null,
+        status:comClean(c[I.st])||'Não informado',curso:comClean(c[I.cur])||'Não informado',
+        midia:comClean(c[I.mid])||'Não informado',carteira:comClean(c[I.cart])||'',cluster:comClean(c[I.clus])||'',
+        tipoContrato:comClean(c[I.tc])||'',evento:comClean(c[I.ev])||'Não informado',
+        captador:comClean(c[I.cap])||'',orientador:comClean(c[I.ori])||'',
+        escolaridade:comClean(c[I.esc])||'Não informado',idade:isNaN(idade)?null:idade,
+        vc:nBR(comClean(c[I.vc]))||0, vp:nBR(comClean(c[I.vp]))||0});
+      if(j%12000===0)await tick();
+    }
   }
   COM.rows=rows;
   return rows;
@@ -1620,10 +1638,9 @@ async function initComercial(){
   }
   renderComercial();
 }
-function comFiltrada(){
-  let L=COM.rows||[];
-  if(COM.modo==='m')L=L.filter(comValida);
-  const f=COM.f;
+function comSec(sec){COM.sec=sec;document.querySelectorAll('#comSb .sb-item').forEach(b=>b.classList.toggle('active',b.dataset.sec===sec));renderComercial();}
+function comFiltradaBase(){
+  let L=COM.rows||[]; const f=COM.f;
   if(f.ano.size)L=L.filter(r=>f.ano.has(String(r.ano)));
   if(f.uni.size)L=L.filter(r=>f.uni.has(r.uni));
   if(f.cart.size)L=L.filter(r=>f.cart.has(r.carteira||'(sem)'));
@@ -1631,12 +1648,38 @@ function comFiltrada(){
   if(f.midia.size)L=L.filter(r=>f.midia.has(r.midia));
   return L;
 }
+const comAgg=(arr,k)=>{const o={};arr.forEach(r=>{const v=k(r);if(v!=null&&v!=='')o[v]=(o[v]||0)+1;});return o;};
+const comAggV=(arr,k,val)=>{const o={};arr.forEach(r=>{const v=k(r);if(v!=null&&v!=='')o[v]=(o[v]||0)+val(r);});return o;};
+const comTop=(obj,n)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);
+const COM_PAL=['#1B3F94','#4CAF4A','#FBC02D','#c0392b','#4a6fc2','#8e44ad','#16a085','#a8740a'];
+function comKill(){COM.lastCharts.forEach(id=>kill(id));COM.lastCharts=[];}
+function comMk(id,cfg){COM.lastCharts.push(id);mk(id,cfg);}
+function comDonut(id,obj,n){const top=comTop(obj,n);
+  comMk(id,{type:'doughnut',data:{labels:top.map(x=>x[0]),datasets:[{data:top.map(x=>x[1]),backgroundColor:COM_PAL,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{boxWidth:8,font:{size:9.5}}}}}});}
+function comBar(id,obj,n,cor,money){const top=comTop(obj,n);
+  comMk(id,{type:'bar',data:{labels:top.map(x=>x[0].length>18?x[0].slice(0,17)+'…':x[0]),datasets:[{data:top.map(x=>x[1]),backgroundColor:cor,borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>money?brl(c.raw):c.raw.toLocaleString('pt-BR')}}},
+      scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:money?{callback:v=>shr(v)}:{}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});}
+const MAB=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function comLinhasAno(id,anos,porAno,fnVal,money){
+  comMk(id,{type:'line',data:{labels:MAB,datasets:anos.map((a,i)=>({label:String(a),
+    data:MAB.map((_,m)=>fnVal(porAno[a].filter(r=>r.mesN===m))),
+    borderColor:COM_PAL[i%3],backgroundColor:COM_PAL[i%3],tension:.3,pointRadius:2.5,borderWidth:2.5}))},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{boxWidth:9,usePointStyle:true,pointStyle:'circle'}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+(money?brl(c.raw):c.raw.toLocaleString('pt-BR'))}}},
+      scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:money?{callback:v=>shr(v)}:{}}}}});
+}
+function kpiHtml(arr){return arr.map(k=>`<div class="kpi" style="--kc:${k.c||'var(--blue)'}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');}
+const comC2=(t1,s1,id1,t2,s2,id2)=>`<div class="crow c2e"><div class="cc"><div class="cc-t">${t1}</div><div class="cc-s">${s1||''}</div><div class="chart-box tall"><canvas id="${id1}"></canvas></div></div><div class="cc"><div class="cc-t">${t2}</div><div class="cc-s">${s2||''}</div><div class="chart-box tall"><canvas id="${id2}"></canvas></div></div></div>`;
+
 function renderComercial(){
   if(!COM.rows)return;
+  comKill();
   $('comModoM').classList.toggle('gold',COM.modo==='m');
   $('comModoC').classList.toggle('gold',COM.modo==='c');
   $('comModoTxt').innerHTML=COM.modo==='m'
-    ?'ℹ️ Exibindo apenas <b>Matrículas Válidas</b> — excluídos Anulado, Cancelado, Pré-Matrícula e Transferência (regra do Dash Comercial).'
+    ?'ℹ️ Exibindo apenas <b>Matrículas Válidas</b> — excluídos Anulado, Cancelado, Pré-Matrícula e Transferência.'
     :'ℹ️ Exibindo <b>todos os Contratos Gerados</b>.';
   const uniq=(arr,k)=>[...new Set(arr.map(r=>k(r)).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt'));
   mselBuild('msKAno','Anos',uniq(COM.rows,r=>String(r.ano)),COM.f.ano,renderComercial);
@@ -1644,47 +1687,74 @@ function renderComercial(){
   mselBuild('msKCart','Carteiras',uniq(COM.rows,r=>r.carteira||'(sem)'),COM.f.cart,renderComercial);
   mselBuild('msKCurso','Cursos',uniq(COM.rows,r=>r.curso),COM.f.curso,renderComercial);
   mselBuild('msKMidia','Mídias',uniq(COM.rows,r=>r.midia),COM.f.midia,renderComercial);
-  const L=comFiltrada();
+  const base=comFiltradaBase();
+  const L=COM.modo==='m'?base.filter(comValida):base;
   const anos=[...new Set(L.map(r=>r.ano))].sort();
-  $('comStatus').textContent=(COM.rows.length.toLocaleString('pt-BR'))+' registros na base · '+L.length.toLocaleString('pt-BR')+' no filtro';
-  // KPIs
   const porAno={}; anos.forEach(a=>porAno[a]=L.filter(r=>r.ano===a));
-  const cores=['var(--blue)','var(--green)','var(--gold-dk)'];
-  const kd=anos.map((a,i)=>{const R=porAno[a];const tick=R.length?R.reduce((s,r)=>s+r.vp,0)/R.length:0;
-    return {l:(COM.modo==='m'?'Matrículas ':'Contratos ')+a,v:R.length.toLocaleString('pt-BR'),s:'ticket médio '+brl(tick),c:cores[i%3]};});
-  // perdas (sempre sobre a base toda do filtro sem modo)
-  let base=COM.rows;
-  const f=COM.f;
-  if(f.ano.size)base=base.filter(r=>f.ano.has(String(r.ano)));
-  if(f.uni.size)base=base.filter(r=>f.uni.has(r.uni));
-  if(f.cart.size)base=base.filter(r=>f.cart.has(r.carteira||'(sem)'));
-  if(f.curso.size)base=base.filter(r=>f.curso.has(r.curso));
-  if(f.midia.size)base=base.filter(r=>f.midia.has(r.midia));
   const perdas=base.filter(comPerda);
-  kd.push({l:'Perdas (anul./cancel./pré)',v:perdas.length.toLocaleString('pt-BR'),s:base.length?pcts(perdas.length/base.length*100)+' dos contratos':'',c:'var(--dn)'});
-  kd.push({l:'Valor pago (filtro)',v:brl(L.reduce((s,r)=>s+r.vp,0)),s:'calculado '+brl(L.reduce((s,r)=>s+r.vc,0)),c:'var(--blue-dk)'});
-  $('comKpis').innerHTML=kd.map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
-  // comparativo anual mensal
-  const MAB=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const pal=['#1B3F94','#4CAF4A','#FBC02D'];
-  mk('cComAnual',{type:'line',data:{labels:MAB,datasets:anos.map((a,i)=>({label:String(a),
-    data:MAB.map((_,m)=>porAno[a].filter(r=>r.mesN===m).length),
-    borderColor:pal[i%3],backgroundColor:pal[i%3],tension:.3,pointRadius:2.5,borderWidth:2.5}))},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{boxWidth:9,usePointStyle:true,pointStyle:'circle'}}},
-      scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(0,0,0,.05)'}}}}});
-  const topN=(obj,n)=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);
-  const agg=(arr,k)=>{const o={};arr.forEach(r=>{const v=k(r);o[v]=(o[v]||0)+1;});return o;};
-  const dn=(id,dataObj,n,cor)=>{const top=topN(dataObj,n);
-    mk(id,{type:'doughnut',data:{labels:top.map(x=>x[0]),datasets:[{data:top.map(x=>x[1]),backgroundColor:['#1B3F94','#4CAF4A','#FBC02D','#c0392b','#4a6fc2','#8e44ad','#16a085','#a8740a'],borderColor:'#fff',borderWidth:2}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{boxWidth:8,font:{size:9.5}}}}}});};
-  dn('cComMidia',agg(L,r=>r.midia),8);
-  dn('cComPerdas',agg(perdas,r=>r.status),6);
-  const bar=(id,dataObj,n,cor)=>{const top=topN(dataObj,n);
-    mk(id,{type:'bar',data:{labels:top.map(x=>x[0].length>18?x[0].slice(0,17)+'…':x[0]),datasets:[{data:top.map(x=>x[1]),backgroundColor:cor,borderRadius:3}]},
-      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{grid:{color:'rgba(0,0,0,.05)'}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});};
-  bar('cComTopU',agg(L,r=>r.uni),12,'rgba(61,92,168,.8)');
-  bar('cComCurso',agg(L,r=>r.curso),10,'rgba(76,175,74,.8)');
+  $('comStatus').textContent=COM.rows.length.toLocaleString('pt-BR')+' registros · '+L.length.toLocaleString('pt-BR')+' no filtro';
+  const box=$('comSecBox'); const cores=['var(--blue)','var(--green)','var(--gold-dk)'];
+  const lblReg=COM.modo==='m'?'Matrículas':'Contratos';
+
+  if(COM.sec==='visao'){
+    const kd=anos.map((a,i)=>{const R=porAno[a];const tick=R.length?R.reduce((x,r)=>x+r.vp,0)/R.length:0;
+      return {l:lblReg+' '+a,v:R.length.toLocaleString('pt-BR'),s:'ticket médio '+brl(tick),c:cores[i%3]};});
+    kd.push({l:'Perdas',v:perdas.length.toLocaleString('pt-BR'),s:base.length?pcts(perdas.length/base.length*100)+' dos contratos':'',c:'var(--dn)'});
+    kd.push({l:'Valor pago (filtro)',v:brl(L.reduce((x,r)=>x+r.vp,0)),s:'calculado '+brl(L.reduce((x,r)=>x+r.vc,0)),c:'var(--blue-dk)'});
+    box.innerHTML='<div class="kpi-grid">'+kpiHtml(kd)+'</div>'+comC2(lblReg+' por mês — comparativo anual','','cV1','Origem (Mídia)','','cV2');
+    comLinhasAno('cV1',anos,porAno,arr=>arr.length);
+    comDonut('cV2',comAgg(L,r=>r.midia),8);
+  }
+  else if(COM.sec==='financeiro'){
+    const kd=anos.map((a,i)=>({l:'Valor pago '+a,v:brl(porAno[a].reduce((x,r)=>x+r.vp,0)),s:'calculado '+brl(porAno[a].reduce((x,r)=>x+r.vc,0)),c:cores[i%3]}));
+    box.innerHTML='<div class="kpi-grid">'+kpiHtml(kd)+'</div>'+comC2('Valor pago por mês — comparativo anual','','cF1','Valor pago por unidade (top 12)','','cF2');
+    comLinhasAno('cF1',anos,porAno,arr=>arr.reduce((x,r)=>x+r.vp,0),true);
+    comBar('cF2',comAggV(L,r=>r.uni,r=>r.vp),12,'rgba(27,63,148,.8)',true);
+  }
+  else if(COM.sec==='matriculas'){
+    const idades={'até 17':0,'18-24':0,'25-34':0,'35-44':0,'45+':0};
+    L.forEach(r=>{if(r.idade==null)return;if(r.idade<18)idades['até 17']++;else if(r.idade<25)idades['18-24']++;else if(r.idade<35)idades['25-34']++;else if(r.idade<45)idades['35-44']++;else idades['45+']++;});
+    box.innerHTML='<div class="kpi-grid">'+kpiHtml(anos.map((a,i)=>({l:lblReg+' '+a,v:porAno[a].length.toLocaleString('pt-BR'),c:cores[i%3]})))+'</div>'
+      +comC2(lblReg+' por mês — comparativo anual','','cM1','Escolaridade','','cM2')
+      +comC2('Faixa etária','','cM3','Por evento (top 10)','','cM4');
+    comLinhasAno('cM1',anos,porAno,arr=>arr.length);
+    comDonut('cM2',comAgg(L,r=>r.escolaridade),7);
+    comMk('cM3',{type:'bar',data:{labels:Object.keys(idades),datasets:[{data:Object.values(idades),backgroundColor:'rgba(76,175,74,.8)',borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(0,0,0,.05)'}}}}});
+    comBar('cM4',comAgg(L.filter(r=>r.evento!=='Não informado'),r=>r.evento),10,'rgba(142,68,173,.75)');
+  }
+  else if(COM.sec==='unidades'){
+    const porU={}; L.forEach(r=>{const u=porU[r.uni]||(porU[r.uni]={n:0,vp:0});u.n++;u.vp+=r.vp;});
+    const ord=Object.entries(porU).sort((a,b)=>b[1].n-a[1].n);
+    box.innerHTML='<div class="crow c2e"><div class="cc"><div class="cc-t">Top unidades — '+lblReg.toLowerCase()+'</div><div class="chart-box tall"><canvas id="cU1"></canvas></div></div>'
+      +'<div class="cc"><div class="cc-t">Ranking completo</div><div class="cc-s">'+ord.length+' unidades no filtro</div><div class="twrap" style="max-height:340px;overflow:auto"><table class="dt"><thead><tr><th>#</th><th>Unidade</th><th class="num">'+lblReg+'</th><th class="num">Valor pago</th><th class="num">Ticket</th></tr></thead><tbody>'
+      +ord.map((x,i)=>`<tr><td>${i+1}</td><td><b>${x[0]}</b></td><td class="num">${x[1].n.toLocaleString('pt-BR')}</td><td class="num">${brl(x[1].vp)}</td><td class="num">${brl(x[1].n?x[1].vp/x[1].n:0)}</td></tr>`).join('')
+      +'</tbody></table></div></div></div>';
+    comBar('cU1',comAgg(L,r=>r.uni),14,'rgba(27,63,148,.8)');
+  }
+  else if(COM.sec==='equipe'){
+    box.innerHTML=comC2('Top captadores','nomes válidos apenas','cQ1','Top orientadores','','cQ2');
+    comBar('cQ1',comAgg(L.filter(r=>comBomNome(r.captador)),r=>r.captador),14,'rgba(22,160,133,.8)');
+    comBar('cQ2',comAgg(L.filter(r=>comBomNome(r.orientador)),r=>r.orientador),14,'rgba(74,111,194,.8)');
+  }
+  else if(COM.sec==='perdas'){
+    const kd=[{l:'Perdas no filtro',v:perdas.length.toLocaleString('pt-BR'),s:base.length?pcts(perdas.length/base.length*100)+' dos contratos gerados':'',c:'var(--dn)'},
+      {l:'Contratos gerados',v:base.length.toLocaleString('pt-BR'),c:'var(--blue)'}];
+    box.innerHTML='<div class="kpi-grid">'+kpiHtml(kd)+'</div>'+comC2('Composição de perdas','por status','cP1','Perdas por unidade (top 12)','','cP2');
+    comDonut('cP1',comAgg(perdas,r=>r.status),6);
+    comBar('cP2',comAgg(perdas,r=>r.uni),12,'rgba(192,57,43,.75)');
+  }
+  else if(COM.sec==='marketing'){
+    box.innerHTML=comC2('Origem das matrículas (Mídia)','','cK1','Matrículas por evento','','cK2');
+    comDonut('cK1',comAgg(L,r=>r.midia),8);
+    comBar('cK2',comAgg(L.filter(r=>r.evento!=='Não informado'),r=>r.evento),12,'rgba(168,116,10,.8)');
+  }
+  else if(COM.sec==='banco'){
+    box.innerHTML=`<div class="cc"><div class="cc-t">Retroalimentar o banco de dados</div>
+      <div class="cc-s">Agrega as <b>matrículas válidas</b> por unidade × mês (com ticket médio pelo Valor Calculado) e grava nos fechamentos por mesclagem — abastece o DRE, a Visão Rede e o Painel de Controle, inclusive o histórico 2024–2025.</div>
+      <div class="btn-row"><button class="btn gold" onclick="comAlimentarBanco()">Gravar matrículas no banco</button><span class="cnt" id="comFeedStatus"></span></div>
+      <div class="hint" id="comFeedDet" style="margin-top:8px"></div></div>`;
+  }
 }
 async function comAlimentarBanco(){
   if(!COM.rows){toast('Base ainda não carregada.');return;}
@@ -1716,8 +1786,8 @@ async function comAlimentarBanco(){
       $('comFeedStatus').textContent=feito+' / '+keys.length+' gravados…';
     }
     $('comFeedStatus').textContent='Concluído: '+keys.length+' unidade×mês.';
-    $('comFeedDet').innerHTML=(semCad.size?('Unidades da base sem cadastro na plataforma (ignoradas): '+[...semCad].slice(0,12).join(', ')+(semCad.size>12?' …':'')):'Todas as unidades casaram com o cadastro.');
-    toast('Matrículas gravadas no banco — DRE, Rede e Painel atualizados.');
+    $('comFeedDet').innerHTML=(semCad.size?('Unidades da base sem cadastro (ignoradas): '+[...semCad].slice(0,12).join(', ')+(semCad.size>12?' …':'')):'Todas as unidades casaram com o cadastro.');
+    toast('Matrículas gravadas — DRE, Rede e Painel atualizados.');
     initUI();
   }catch(e){$('comFeedStatus').textContent='Erro: '+e.message;}
 }
