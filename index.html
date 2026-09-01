@@ -192,7 +192,22 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <select id="dreUnit" style="min-width:230px" onchange="renderDRE()"></select>
     <select id="dreAno" onchange="renderDRE()"></select>
     <button class="btn ghost" id="dreModoBtn" onclick="state.dreModo=state.dreModo==='pct'?'rs':'pct';renderDRE()">Ver em % do faturamento</button>
+    <button class="btn ghost" id="outBtn" onclick="$('outPanel').style.display=$('outPanel').style.display==='none'?'block':'none';renderOutliers()">Outliers do padrão da rede</button>
     <span class="cnt" id="dreMeta"></span>
+  </div>
+  <div class="panel" id="outPanel" style="display:none">
+    <div class="panel-t">Unidades desconsideradas no padrão da rede</div>
+    <div class="panel-s">Unidades que não lançam as despesas corretamente distorcem a média. Elas ficam fora do cálculo do padrão (o DRE delas continua visível normalmente).</div>
+    <div class="filters">
+      <label class="cnt">Regra automática: excluir do mês a unidade cuja despesa total for menor que</label>
+      <input type="number" id="outMinPct" step="5" min="0" max="100" style="width:80px" onchange="renderOutliers();renderDRE()"> <span class="cnt">% do faturamento</span>
+      <button class="btn ghost" onclick="outAplicarSugeridas()">Marcar as sugeridas</button>
+      <button class="btn" onclick="outSalvar()">Salvar para todos</button>
+      <span class="cnt" id="outStatus"></span>
+    </div>
+    <div class="hint" id="outSugestao" style="margin-bottom:8px"></div>
+    <div class="hint" style="margin-bottom:4px">Exclusão manual (clique para marcar/desmarcar — riscadas = fora do padrão):</div>
+    <div class="chips" id="outChips"></div>
   </div>
   <div class="kpi-grid" id="dreKpis"></div>
   <div class="tcard"><div class="twrap"><table class="dt" id="dreTable"></table></div></div>
@@ -369,7 +384,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v2.8 · % do faturamento";
+const VERSAO = "v2.9 · outliers";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -430,7 +445,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-const state = { user:null, perfil:null, unidades:{}, fech:{}, metasCache:{}, charts:{}, cmpSel:new Set() };
+const state = { user:null, perfil:null, unidades:{}, fech:{}, metasCache:{}, charts:{}, cmpSel:new Set(), outliers:new Set(), minDespPct:40 };
 const $=id=>document.getElementById(id);
 const brl=v=>(v==null||isNaN(v))?'—':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(v);
 const shr=v=>{if(v==null||isNaN(v))return'—';const s=v<0?'-':'';v=Math.abs(v);if(v>=1e6)return s+'R$'+(v/1e6).toFixed(1)+'M';if(v>=1e3)return s+'R$'+(v/1e3).toFixed(0)+'K';return s+'R$'+v.toFixed(0)};
@@ -501,6 +516,8 @@ async function carregarTudo(){
       fs.forEach(d=>{ state.fech[d.id]=d.data(); });
     }
   }
+  try{ const cfg=await db.collection('config').doc('dre').get();
+    if(cfg.exists){ const d=cfg.data(); state.outliers=new Set(d.outliers||[]); if(d.minDespPct!=null)state.minDespPct=+d.minDespPct; } }catch(e){}
   $('barSub').textContent=TITULO+' · '+Object.keys(state.unidades).length+' unidade(s) · '+Object.keys(state.fech).length+' fechamento(s)';
   initUI();
 }
@@ -642,7 +659,7 @@ function renderDRE(){
     {l:'Inadimplência',v:pcts(last.inadimplencia),c:last.inadimplencia>=CFG.inadR?'var(--dn)':last.inadimplencia>=CFG.inadY?'var(--gold-dk)':'var(--green)'},
   ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div></div>`).join('')
   +(parcial.length?`<div class="kpi" style="--kc:var(--gold-dk)"><div class="kpi-l">Atenção</div><div class="kpi-v" style="font-size:12px">${parcial.map(f=>mLbl(f.mes)).join(', ')}: só despesas</div><div class="kpi-s">receita ainda não importada — mês parcial</div></div>`:'');
-  $('dreMeta').textContent=[u.carteira,u.cluster,'Regime de caixa: receita na quitação · despesa no pagamento'].filter(Boolean).join(' · ');
+  $('dreMeta').textContent=[u.carteira,u.cluster,'Regime de caixa: receita na quitação · despesa no pagamento',(state.outliers.size?state.outliers.size+' outlier(s) fora do padrão da rede':'')].filter(Boolean).join(' · ');
 
   // Tabela DRE: linhas = contas, colunas = meses
   const cols=serie.map(f=>f.mes);
@@ -658,9 +675,10 @@ function renderDRE(){
   $('dreModoBtn').classList.toggle('gold',modoPct);
   const redeMes={};
   for(const m of cols){
-    const todos=Object.values(state.fech).filter(f=>f.mes===m).map(metr).filter(f=>f.despTotal>0&&f.faturamento>0);
+    const base=Object.values(state.fech).filter(f=>f.mes===m).map(metr).filter(f=>f.despTotal>0&&f.faturamento>0);
+    const todos=base.filter(f=>!state.outliers.has(f.unidadeId)&&f.despTotal/f.faturamento*100>=state.minDespPct);
     const sumFat=todos.reduce((a,f)=>a+f.faturamento,0)||1;
-    const med={n:todos.length,sumFat,pct:{}};
+    const med={n:todos.length,nExcl:base.length-todos.length,sumFat,pct:{}};
     for(const c of CATEGORIAS)med.pct[c]=todos.reduce((a,f)=>a+(+((f.despesas||{})[c])||0),0)/sumFat;
     for(const k of ['despTotal','deducoes','custosVar','custosFixos','financeiro','distribuicao','receitaLiquida','mc','ebitda','antesDist','resultado','faturamento','mkt','receitaParcelas','receitaComercial'])
       med.pct[k]=todos.reduce((a,f)=>a+(+f[k]||0),0)/sumFat;
@@ -669,7 +687,7 @@ function renderDRE(){
     redeMes[m]=med;
   }
   const pp=v=>(v>=0?'+':'')+v.toFixed(1).replace('.',',')+' p.p.';
-  const tipHtml=(label,m,val,pR,fatU,n,invert)=>{
+  const tipHtml=(label,m,val,pR,fatU,n,invert,nExcl)=>{
     const pU=fatU>0?val/fatU:null;
     const padrao=pR!=null&&fatU>0?pR*fatU:null;           // quanto a unidade gastaria se seguisse o % da rede
     const desvio=padrao!=null?val-padrao:null;
@@ -677,7 +695,7 @@ function renderDRE(){
     const ruim=rel!=null&&(invert?rel<0:rel>0);
     const cor=rel==null?'':ruim?'#FF8A80':'#9BE7A0';
     return `<b>${label}</b> · ${mLbl(m)}<br>`+
-      `Padrão da rede: <b>${pR!=null?pcts(pR*100):'—'}</b> do faturamento <span class="mini">(${n} unidades)</span><br>`+
+      `Padrão da rede: <b>${pR!=null?pcts(pR*100):'—'}</b> do faturamento <span class="mini">(${n} unidades${nExcl?' · '+nExcl+' desconsideradas':''})</span><br>`+
       `Esta unidade: <b>${pU!=null?pcts(pU*100):'—'}</b>${pU!=null&&pR!=null?` <span style="color:${cor}">(${pp((pU-pR)*100)})</span>`:''}<br>`+
       (padrao!=null?`<span class="mini">Em R$: ${brl(val)} · pelo padrão da rede seria ${brl(padrao)} → <span style="color:${cor}">${desvio>=0?'+':''}${brl(desvio)}</span></span>`:'');
   };
@@ -690,7 +708,7 @@ function renderDRE(){
       const pU=fatU>0?v/fatU:null;
       const rel=(pU!=null&&pR>0)?(pU-pR)/pR*100:null;
       let c=''; if(rel!=null){ if(rel>15)c=invert?'abaixo':'acima'; else if(rel<-15)c=invert?'acima':'abaixo'; }
-      const tip=tipHtml(label.replace(/^\([+\-=]\) /,'').trim(),m,v,pR,fatU,med.n,invert).replace(/"/g,'&quot;');
+      const tip=tipHtml(label.replace(/^\([+\-=]\) /,'').trim(),m,v,pR,fatU,med.n,invert,med.nExcl).replace(/"/g,'&quot;');
       const txt=modoPct?(pU!=null?pcts(pU*100):'—'):fmtAbs(v);
       const sub=modoPct?'':(pR!=null?`<div class="usub">rede ${pcts(pR*100)}</div>`:'');
       h+=`<td class="num"><span class="tip-cell ${c}" data-tip="${tip}">${txt}</span>${sub}</td>`;
@@ -1270,6 +1288,38 @@ async function renderMetas(){
   document.addEventListener('click',e=>{ const t=e.target.closest('.tip-cell');
     if(t){ fixo=true; show(t,e); e.stopPropagation(); } else { fixo=false; tip.style.display='none'; } });
 })();
+
+/* ── Outliers do padrão da rede ── */
+function outSugeridas(){
+  const ano=$('dreAno').value, lim=state.minDespPct;
+  const porU={};
+  for(const f0 of Object.values(state.fech)){
+    if(!f0.mes.startsWith(ano))continue; const f=metr(f0);
+    if(!(f.faturamento>0))continue;
+    const p=porU[f.unidadeId]||(porU[f.unidadeId]={meses:0,baixo:0,pctMin:Infinity});
+    p.meses++; const pc=f.despTotal/f.faturamento*100; if(pc<lim)p.baixo++; if(pc<p.pctMin)p.pctMin=pc;
+  }
+  return Object.entries(porU).filter(([u,p])=>p.baixo>0&&state.unidades[u]).map(([u,p])=>({uid:u,...p})).sort((a,b)=>b.baixo-a.baixo);
+}
+function renderOutliers(){
+  $('outMinPct').value=state.minDespPct;
+  state.minDespPct=+$('outMinPct').value||0;
+  const sug=outSugeridas();
+  $('outSugestao').innerHTML=sug.length?
+    '<b>Sugeridas pela regra ('+state.minDespPct+'%):</b> '+sug.map(x=>`${state.unidades[x.uid].nome} <span class="mini">(${x.baixo}/${x.meses} meses, mín. ${pcts(x.pctMin)})</span>`).join(' · ')+
+    '<br><span class="mini">A regra automática já tira essas unidades dos meses em que a despesa ficou abaixo do limite; marcá-las exclui em todos os meses.</span>'
+    :'Nenhuma unidade abaixo do limite em '+$('dreAno').value+'.';
+  const ids=Object.keys(state.unidades).sort((a,b)=>state.unidades[a].nome.localeCompare(state.unidades[b].nome));
+  $('outChips').innerHTML=ids.map(id=>`<span class="chip${state.outliers.has(id)?' sel':''}" style="${state.outliers.has(id)?'text-decoration:line-through;background:var(--dn);border-color:var(--dn)':''}" onclick="outToggle('${id}')">${state.unidades[id].nome}</span>`).join('');
+  $('outStatus').textContent=state.outliers.size+' excluída(s) manualmente';
+}
+function outToggle(id){ state.outliers.has(id)?state.outliers.delete(id):state.outliers.add(id); renderOutliers(); renderDRE(); }
+function outAplicarSugeridas(){ outSugeridas().forEach(x=>state.outliers.add(x.uid)); renderOutliers(); renderDRE(); }
+async function outSalvar(){
+  try{ await db.collection('config').doc('dre').set({outliers:[...state.outliers],minDespPct:state.minDespPct,salvoPor:state.user.email,salvoEm:new Date().toISOString()});
+    toast('Outliers salvos — valem para todos os usuários.'); }
+  catch(e){ toast('Erro ao salvar: '+e.message); }
+}
 
 /* ================================================================
    ADMIN
