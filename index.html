@@ -478,7 +478,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.7.1 · metas por perfil";
+const VERSAO = "v3.7.2 · metas mês auto";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -1318,6 +1318,7 @@ function initMetas(){
     META_INIT=true;
     const mesAtual=new Date().getMonth()+1;
     $('mMes').innerHTML=METAS_MESES.map(m=>`<option value="${m.key}"${m.ordem===mesAtual?' selected':''}>${m.label}</option>`).join('');
+    $('mMes').addEventListener('change',()=>{state.metasMesManual=true;});
     $('mAvisoCebrac').style.display=METAS_CFG.cebracBase?'none':'block';
   }
   renderMetas();
@@ -1385,10 +1386,23 @@ function metasPermitida(o){
   return false;
 }
 async function renderMetas(){
-  const mesKey=$('mMes').value||METAS_MESES[new Date().getMonth()].key;
+  let mesKey=$('mMes').value||METAS_MESES[new Date().getMonth()].key;
   let dados;
-  try{ dados=await metasFetch(mesKey); }
+  try{
+    dados=await metasFetch(mesKey);
+    // mês corrente ainda sem dados (início de mês): recua automaticamente até achar
+    if(!state.metasMesManual){
+      let ordem=METAS_MESES.find(x=>x.key===mesKey).ordem;
+      let recuou=false;
+      while((!dados||!dados.lista.length)&&ordem>1){
+        ordem--; mesKey=METAS_MESES[ordem-1].key; recuou=true;
+        try{ dados=await metasFetch(mesKey); }catch(e){ dados={lista:[],temCebrac:false}; }
+      }
+      if(recuou&&dados.lista.length){ $('mMes').value=mesKey; toast('Metas: '+METAS_MESES[ordem-1].label+' — último mês com dados na planilha.'); }
+    }
+  }
   catch(e){ $('mStatus').textContent='Erro ao ler a planilha: '+e.message; return; }
+  if(!dados||!dados.lista.length){ $('mStatus').textContent='Sem dados na planilha para este mês.'; $('mKpis').innerHTML='';$('mTable').innerHTML='';$('mFunil').innerHTML='';['cRankMeta','cRankYoY','cDntYoY'].forEach(kill); return; }
   const permitidas=dados.lista.filter(metasPermitida);
   const carts=[...new Set(permitidas.map(o=>o.carteira).filter(Boolean))].sort();
   mselBuild('msMCart','Carteiras',carts,state.f.mc,renderMetas);
