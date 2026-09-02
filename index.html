@@ -478,12 +478,12 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.6 · comercial em 2º plano";
+const VERSAO = "v3.7 · login ativo";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
    Ao reativar, publique também o firestore.rules (versão segura). */
-const AUTH_ENABLED = false;
+const AUTH_ENABLED = true;
 
 /* URL /exec do Dashboard Unificado (Metas + Crescimento) publicado no
    Apps Script — o app "Porteiro". Cole aqui quando quiser a aba integrada. */
@@ -1657,8 +1657,13 @@ async function initComercial(){
   renderComercial();
 }
 function comSec(sec){COM.sec=sec;document.querySelectorAll('#comSb .sb-item').forEach(b=>b.classList.toggle('active',b.dataset.sec===sec));renderComercial();}
+function comPermitida(r){
+  if(!AUTH_ENABLED)return true;
+  if(state.perfil.papel==='admin'||(state.perfil.unidades||[]).includes('*'))return true;
+  return !!state.unidades[slug(r.uni)];   // unidades visíveis já refletem carteira/lista do usuário
+}
 function comFiltradaBase(){
-  let L=COM.rows||[]; const f=COM.f;
+  let L=(COM.rows||[]).filter(comPermitida); const f=COM.f;
   if(f.ano.size)L=L.filter(r=>f.ano.has(String(r.ano)));
   if(f.uni.size)L=L.filter(r=>f.uni.has(r.uni));
   if(f.cart.size)L=L.filter(r=>f.cart.has(r.carteira||'(sem)'));
@@ -1701,7 +1706,7 @@ function renderComercial(){
     :'ℹ️ Exibindo <b>todos os Contratos Gerados</b>.';
   const uniq=(arr,k)=>[...new Set(arr.map(r=>k(r)).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt'));
   mselBuild('msKAno','Anos',uniq(COM.rows,r=>String(r.ano)),COM.f.ano,renderComercial);
-  mselBuild('msKUni','Unidades',uniq(COM.rows.filter(comValida),r=>r.uni),COM.f.uni,renderComercial);
+  mselBuild('msKUni','Unidades',uniq(COM.rows.filter(r=>comValida(r)&&comPermitida(r)),r=>r.uni),COM.f.uni,renderComercial);
   mselBuild('msKCart','Carteiras',uniq(COM.rows,r=>r.carteira||'(sem)'),COM.f.cart,renderComercial);
   mselBuild('msKCurso','Cursos',uniq(COM.rows,r=>r.curso),COM.f.curso,renderComercial);
   mselBuild('msKMidia','Mídias',uniq(COM.rows,r=>r.midia),COM.f.midia,renderComercial);
@@ -1776,7 +1781,7 @@ function renderComercial(){
 }
 async function comAlimentarBanco(){
   if(!COM.rows){toast('Base ainda não carregada.');return;}
-  const validas=COM.rows.filter(r=>comValida(r)&&r.mes);
+  const validas=COM.rows.filter(r=>comValida(r)&&r.mes&&comPermitida(r));
   const nomeToId={}; Object.values(state.unidades).forEach(u=>nomeToId[comNrm(u.nome)]=u.id);
   const agg={}; const semCad=new Set();
   for(const r of validas){
