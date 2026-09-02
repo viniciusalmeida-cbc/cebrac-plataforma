@@ -127,6 +127,25 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 .crow.c2e{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
 @media(max-width:1100px){.crow.c2e{grid-template-columns:1fr}}
 @media(max-width:900px){.com-wrap{grid-template-columns:1fr}.com-sb{position:static;display:flex;flex-wrap:wrap;gap:4px}}
+.crow.c3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:1000px){.crow.c3{grid-template-columns:1fr}}
+.ins-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin-bottom:14px}
+.ins{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--ic,var(--blue));border-radius:10px;padding:11px 13px;display:flex;gap:10px;box-shadow:var(--sh)}
+.ins-i{font-size:18px;line-height:1}
+.ins-t{font-size:12px;font-weight:700;margin-bottom:2px}
+.ins-b{font-size:11px;color:var(--t2);line-height:1.5}
+.funil{display:flex;align-items:center;justify-content:space-around;gap:6px;padding:14px 4px}
+.fun-step{text-align:center;background:var(--blue-lt);border-radius:10px;padding:12px 16px;min-width:110px}
+.fun-v{font-size:20px;font-weight:800;color:var(--blue-dk)}
+.fun-l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-top:2px}
+.fun-arrow{text-align:center;color:var(--t3);font-size:18px}
+.fun-conv{font-size:11px;font-weight:700;color:var(--green-dk)}
+.mdl-ov{position:fixed;inset:0;background:rgba(20,30,60,.55);z-index:800;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+.mdl-ov.open{display:flex}
+.mdl{background:var(--surface);border-radius:16px;width:100%;max-width:880px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.mdl-hd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.mdl-t{font-size:15px;font-weight:800;color:var(--blue-dk)}
+.mdl-bd{padding:16px 20px}
 .acc-grid{display:grid;grid-template-columns:1.2fr .8fr 1fr auto;gap:10px;align-items:end}
 @media(max-width:860px){.acc-grid{grid-template-columns:1fr}}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--t1);color:#fff;padding:11px 17px;border-radius:10px;font-size:12px;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:900}
@@ -250,6 +269,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <span class="cnt" id="dreMeta"></span>
   </div>
   <div class="kpi-grid" id="dreKpis"></div>
+  <div id="dreIns"></div>
   <div class="tcard"><div class="twrap"><table class="dt" id="dreTable"></table></div></div>
   <div class="crow c2">
     <div class="cc"><div class="cc-t">Faturamento × Despesas × Resultado</div><div class="cc-s">série mensal</div>
@@ -365,26 +385,37 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
   <div class="filters">
     <select id="mMes" onchange="renderMetas()"></select>
     <div class="msel" id="msMCart"></div>
+    <div class="msel" id="msMTam"></div>
+    <div class="msel" id="msMUni"></div>
     <input type="text" id="mBusca" placeholder="Buscar unidade…" oninput="renderMetas()">
     <span class="cnt" id="mStatus"></span>
   </div>
   <div id="mAvisoCebrac" class="panel" style="display:none">
-    <div class="hint">⚠ A planilha <b>Cebrac (metas/funil)</b> ainda não está publicada — mostrando apenas o lado de <b>crescimento ano × ano</b>. Para habilitar metas, funil e projeções: abra a planilha Cebrac → Arquivo → Compartilhar → Publicar na web → CSV → cole o link (até /pub) em <b>METAS_CFG.cebracBase</b> no index.html.</div>
+    <div class="hint">⚠ A planilha <b>Cebrac (metas/funil)</b> ainda não está publicada — mostrando apenas o lado de <b>crescimento ano × ano</b>. Para habilitar metas, funil e projeções: planilha Cebrac → Arquivo → Compartilhar → Publicar na web → CSV → cole o link (até /pub) em <b>METAS_CFG.cebracBase</b> no index.html.</div>
   </div>
   <div class="kpi-grid" id="mKpis"></div>
+  <div id="mIns"></div>
   <div class="crow c2">
-    <div class="cc"><div class="cc-t">Atingimento da meta de faturamento</div><div class="cc-s">% por unidade · linha em 100%</div>
-      <div class="chart-box tall"><canvas id="cRankMeta"></canvas></div></div>
-    <div class="cc"><div class="cc-t">Crescimento ano × ano (Fat. Total)</div><div class="cc-s">% por unidade</div>
-      <div class="chart-box tall"><canvas id="cRankYoY"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Funil comercial</div><div class="cc-s">visitas → agendamentos → matrículas, com conversões</div><div id="mFunil"></div></div>
+    <div class="cc"><div class="cc-t">Projeção vs meta</div><div class="cc-s">projeção da planilha Cebrac para o fechamento do mês</div><div id="mProj"></div></div>
+  </div>
+  <div class="crow c3">
+    <div class="cc"><div class="cc-t">Atingimento de meta (fat.)</div><div class="cc-s">unidades por faixa</div><div class="chart-box"><canvas id="cDntMeta"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Fat. matrícula × recebíveis</div><div class="cc-s">composição do faturamento</div><div class="chart-box"><canvas id="cDntOrigem"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Crescimento vs queda (YoY)</div><div class="cc-s">unidades</div><div class="chart-box"><canvas id="cDntYoY"></canvas></div></div>
   </div>
   <div class="crow c2">
-    <div class="cc"><div class="cc-t">Funil comercial do mês</div><div class="cc-s">soma das unidades filtradas</div>
-      <div id="mFunil" style="padding:6px 4px"></div></div>
-    <div class="cc"><div class="cc-t">Situação ano × ano</div><div class="cc-s">unidades crescendo · estáveis · em queda</div>
-      <div class="chart-box"><canvas id="cDntYoY"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Top 10 — % da meta (faturamento)</div><div class="cc-s">clique na barra para abrir a unidade</div><div class="chart-box tall"><canvas id="cRankMeta"></canvas></div></div>
+    <div class="cc"><div class="cc-t">Top 10 — crescimento % (ano atual vs anterior)</div><div class="cc-s">clique na barra para abrir a unidade</div><div class="chart-box tall"><canvas id="cRankYoY"></canvas></div></div>
   </div>
   <div class="tcard"><div class="twrap"><table class="dt" id="mTable"></table></div></div>
+  <p class="hint">Clique no cabeçalho para ordenar · clique na linha para ver a tendência mensal da unidade.</p>
+</div>
+
+<!-- modal de unidade (Metas) -->
+<div class="mdl-ov" id="mdl" onclick="fecharMdl(event)">
+  <div class="mdl"><div class="mdl-hd"><div class="mdl-t" id="mdlTitulo"></div><button class="mdl-x btn ghost" onclick="fecharMdl()">✕</button></div>
+  <div class="mdl-bd" id="mdlBody"></div></div>
 </div>
 
 <!-- ══════ COMERCIAL (matrículas 3 anos) ══════ -->
@@ -478,7 +509,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.7.2 · metas mês auto";
+const VERSAO = "v4.0 · metas completo + diagnóstico";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -555,7 +586,7 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 const state = { user:null, perfil:null, unidades:{}, fech:{}, metasCache:{}, charts:{}, cmpSel:new Set(), outliers:new Set(), minDespPct:40,
-  f:{ rc:new Set(), rk:new Set(), cc:new Set(), ck:new Set(), mc:new Set() } };
+  f:{ rc:new Set(), rk:new Set(), cc:new Set(), ck:new Set(), mc:new Set(), mt:new Set(), mu:new Set() } };
 
 /* ── Multi-select (estilo dash): botão + lista de checkboxes ── */
 const MSEL={};
@@ -818,16 +849,19 @@ function renderDRE(){
   const acum=serie.reduce((s,f)=>s+f.resultado,0);
   const acumFechado=serie.filter(f=>f.mes<=last.mes).reduce((s,f)=>s+f.resultado,0);
   const acumOpFechado=serie.filter(f=>f.mes<=last.mes).reduce((s,f)=>s+f.resultadoOp,0);
+  const SF=serie.filter(f=>f.mes<=last.mes), sum=k=>SF.reduce((a,f)=>a+(+f[k]||0),0);
+  const A={fat:sum('faturamento'),op:sum('resultadoOp'),naoOp:sum('naoOpTotal'),caixa:sum('resultado'),mc:sum('mc'),rl:sum('receitaLiquida'),despOp:sum('despOp'),mat:sum('matriculas')};
   const semProlabore=!serie.some(f=>(f.naoOp||{})['Pró-labore']>0);
   $('dreKpis').innerHTML=[
-    {l:'Faturamento · '+mLbl(last.mes),v:brl(last.faturamento),c:'var(--blue)'},
-    {l:'★ Resultado operacional',v:brl(last.resultadoOp),s:'margem '+pct(last.margemOp),c:last.resultadoOp>=0?'var(--green)':'var(--dn)'},
-    {l:'Não operacionais',v:brl(last.naoOpTotal),s:'pró-labore, retiradas, empréstimos, invest.',c:'var(--t3)'},
-    {l:'Geração de caixa',v:brl(last.resultado),c:last.resultado>=0?'var(--green)':'var(--dn)'},
-    {l:'Margem de contribuição',v:pct(last.mcPct),c:'var(--blue-dk)'},
-    {l:'Res. operacional acumulado '+ano+' (até '+mLbl(last.mes)+')',v:brl(acumOpFechado),c:acumOpFechado>=0?'var(--green)':'var(--dn)'},
-    {l:'Inadimplência',v:pcts(last.inadimplencia),c:last.inadimplencia>=CFG.inadR?'var(--dn)':last.inadimplencia>=CFG.inadY?'var(--gold-dk)':'var(--green)'},
-  ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div></div>`).join('')
+    {l:'Faturamento · '+mLbl(last.mes),v:brl(last.faturamento),s:'acumulado '+ano+': <b>'+brl(A.fat)+'</b>',c:'var(--blue)'},
+    {l:'★ Resultado operacional · '+mLbl(last.mes),v:brl(last.resultadoOp),s:'margem '+pct(last.margemOp)+' · acumulado: <b>'+brl(A.op)+'</b> ('+pct(A.fat>0?A.op/A.fat:null)+')',c:last.resultadoOp>=0?'var(--green)':'var(--dn)'},
+    {l:'Não operacionais',v:brl(last.naoOpTotal),s:'acumulado: <b>'+brl(A.naoOp)+'</b> · pró-labore, retiradas, empréstimos, invest.',c:'var(--t3)'},
+    {l:'Geração de caixa',v:brl(last.resultado),s:'acumulado: <b>'+brl(A.caixa)+'</b>',c:last.resultado>=0?'var(--green)':'var(--dn)'},
+    {l:'Margem de contribuição',v:pct(last.mcPct),s:'acumulada: <b>'+pct(A.rl>0?A.mc/A.rl:null)+'</b>',c:'var(--blue-dk)'},
+    {l:'Despesas operacionais',v:brl(last.despOp),s:'acumulado: <b>'+brl(A.despOp)+'</b> · '+pcts(last.faturamento>0?last.despOp/last.faturamento*100:null)+' da receita',c:'var(--gold-dk)'},
+    {l:'Matrículas',v:last.matriculas??'—',s:'acumulado: <b>'+(A.mat||'—')+'</b>'+(last.ticket?' · ticket '+brl(last.ticket):''),c:'var(--blue)'},
+    {l:'Inadimplência',v:pcts(last.inadimplencia),s:last.carteiraTotal?'carteira '+brl(last.carteiraTotal):'',c:last.inadimplencia>=CFG.inadR?'var(--dn)':last.inadimplencia>=CFG.inadY?'var(--gold-dk)':'var(--green)'},
+  ].map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('')
   +(parcial.length?`<div class="kpi" style="--kc:var(--gold-dk)"><div class="kpi-l">Atenção</div><div class="kpi-v" style="font-size:12px">${parcial.map(f=>mLbl(f.mes)).join(', ')}: só despesas</div><div class="kpi-s">receita ainda não importada — mês parcial</div></div>`:'');
   $('dreMeta').textContent=[u.carteira,u.cluster,'Regime de caixa: receita na quitação · despesa no pagamento',(state.outliers.size?state.outliers.size+' outlier(s) fora do padrão da rede':'')].filter(Boolean).join(' · ');
 
@@ -871,6 +905,48 @@ function renderDRE(){
       (padrao!=null?`<span class="mini">Em R$: ${brl(val)} · pelo padrão da rede seria ${brl(padrao)} → <span style="color:${cor}">${desvio>=0?'+':''}${brl(desvio)}</span></span>`:'');
   };
   // invert=true => acima do padrão é BOM (receitas e margens)
+  /* ── Diagnóstico automático da unidade (último mês fechado × padrão da rede) ── */
+  (function(){
+    const med=redeMes[last.mes]; const ins=[]; if(!med||!last.faturamento){$('dreIns').innerHTML='';return;}
+    const fatU=last.faturamento;
+    // contas fora do padrão (em R$ de impacto)
+    const desvios=CATEGORIAS.map(c=>{const v=last.opCat(c),pR=med.pct[c]||0,pU=v/fatU;const padrao=pR*fatU;
+      return {c,v,pU,pR,desvio:v-padrao,rel:pR>0?(pU-pR)/pR*100:null};}).filter(x=>x.rel!=null&&x.v>0);
+    const piores=desvios.filter(x=>x.rel>15&&x.desvio>fatU*0.01).sort((a,b)=>b.desvio-a.desvio);
+    const melhores=desvios.filter(x=>x.rel<-15&&-x.desvio>fatU*0.01).sort((a,b)=>a.desvio-b.desvio);
+    const potencial=piores.reduce((a,x)=>a+x.desvio,0);
+    if(piores.length)ins.push({i:'💸',t:'var(--dn)',tt:'Onde está o dinheiro: '+brl(potencial)+'/mês acima do padrão da rede',
+      b:piores.slice(0,5).map(x=>`<b>${x.c}</b>: ${pcts(x.pU*100)} vs rede ${pcts(x.pR*100)} → <b>+${brl(x.desvio)}</b>`).join('<br>')+(piores.length>5?'<br>…':'')});
+    if(melhores.length)ins.push({i:'✅',t:'var(--green)',tt:'Melhor que a rede em '+melhores.length+' conta(s)',
+      b:melhores.slice(0,3).map(x=>`<b>${x.c}</b>: ${pcts(x.pU*100)} vs rede ${pcts(x.pR*100)} (${brl(x.desvio)})`).join('<br>')});
+    // ponto de equilíbrio
+    if(last.pontoEq!=null&&last.receitaLiquida>0){const folga=(last.receitaLiquida-last.pontoEq)/last.pontoEq*100;
+      ins.push({i:folga<0?'🔴':folga<10?'🟡':'🟢',t:folga<0?'var(--dn)':folga<10?'var(--gold-dk)':'var(--green)',
+        tt:'Ponto de equilíbrio: '+brl(last.pontoEq)+' de receita líquida',
+        b:folga<0?`A unidade está <b>${pcts(-folga)} abaixo</b> do ponto de equilíbrio — faltam ${brl(last.pontoEq-last.receitaLiquida)}/mês para zerar o resultado operacional.`
+          :`Folga de <b>${pcts(folga)}</b> (${brl(last.receitaLiquida-last.pontoEq)}). ${folga<10?'Margem apertada: qualquer queda de receita vira prejuízo.':'Estrutura de custos confortável para a receita atual.'}`});}
+    // margem operacional × rede
+    const mR=med.pct.resultadoOp; if(last.margemOp!=null&&mR!=null){const d=(last.margemOp-mR)*100;
+      ins.push({i:'📊',t:d>=0?'var(--green)':'var(--dn)',tt:'Margem operacional '+pct(last.margemOp)+' vs rede '+pcts(mR*100),
+        b:d>=0?`<b>${pp(d)}</b> acima do padrão — ${brl(d/100*fatU)}/mês de resultado a mais que uma unidade média do mesmo faturamento.`:`<b>${pp(d)}</b> abaixo do padrão — ${brl(-d/100*fatU)}/mês que uma unidade média com o mesmo faturamento estaria gerando.`});}
+    // tendência 3 meses
+    if(SF.length>=6){const l3=SF.slice(-3).reduce((a,f)=>a+f.faturamento,0)/3,p3=SF.slice(-6,-3).reduce((a,f)=>a+f.faturamento,0)/3;
+      if(p3>0){const t=(l3-p3)/p3*100;ins.push({i:t>=0?'📈':'📉',t:t>=-5?'var(--green)':'var(--dn)',tt:'Tendência de receita: '+mSign(t)+' no trimestre',
+        b:`Média dos últimos 3 meses ${brl(l3)} vs ${brl(p3)} nos 3 anteriores.`+(t<-10?' <b>Queda relevante — cruzar com funil e matrículas.</b>':'')});}}
+    // CAC
+    const cacR=med.matr>0?med.mktTot/med.matr:null;
+    if(last.cac!=null&&cacR){const d=(last.cac-cacR)/cacR*100;ins.push({i:'🎯',t:d>15?'var(--dn)':'var(--blue)',tt:'CAC '+brl(last.cac)+' por matrícula vs rede '+brl(cacR),
+      b:d>15?`Custo de captação <b>${pcts(d)} acima</b> da rede: revisar mix de mídia e conversão do funil.`:`Captação eficiente em relação à rede (${mSign(d)}).`});}
+    // não operacionais
+    const noU=last.naoOpTotal/fatU, noR=med.pct.naoOpTotal||0;
+    if(noU>0&&noR>0&&noU>noR*1.3)ins.push({i:'🏦',t:'var(--gold-dk)',tt:'Retiradas e não operacionais em '+pcts(noU*100)+' da receita (rede '+pcts(noR*100)+')',
+      b:`Pró-labore, retiradas, empréstimos e investimentos consomem ${brl(last.naoOpTotal)}/mês — ${brl((noU-noR)*fatU)} acima do padrão. Se o caixa aperta, é aqui que se olha primeiro.`});
+    // inadimplência
+    if(last.inadimplencia!=null&&last.inadimplencia>=CFG.inadY)ins.push({i:'⚠️',t:last.inadimplencia>=CFG.inadR?'var(--dn)':'var(--gold-dk)',tt:'Inadimplência '+pcts(last.inadimplencia)+' da carteira',
+      b:`${brl(last.carteiraVencida)} vencidos de ${brl(last.carteiraTotal)}. ${last.inadimplencia>=CFG.inadR?'<b>Acima do limite crítico</b> — régua de cobrança e renegociação.':'Acompanhar de perto.'}`});
+    $('dreIns').innerHTML=ins.length?'<div class="panel-t" style="margin:2px 0 8px">🔎 Diagnóstico automático · '+mLbl(last.mes)+' <span class="cnt">(comparado ao padrão da rede em % do faturamento)</span></div><div class="ins-grid">'
+      +ins.map(x=>`<div class="ins" style="--ic:${x.t}"><div class="ins-i">${x.i}</div><div><div class="ins-t">${x.tt}</div><div class="ins-b">${x.b}</div></div></div>`).join('')+'</div>':'';
+  })();
   const rowTip=(label,vals,getPct,cls='',invert=false,fmtAbs=brl)=>{
     const tot=vals.reduce((a,v)=>a+(v||0),0), fatTot=serie.reduce((a,f)=>a+f.faturamento,0);
     let h=`<tr class="${cls}"><td>${label}</td>`;
@@ -1338,7 +1414,7 @@ async function metasFetch(mesKey){
   const [perf,cebrac]=await Promise.allSettled(jobs).then(rs=>rs.map(r=>r.status==='fulfilled'?r.value:null));
   const rows=new Map();
   const get=k=>{ if(!rows.has(k))rows.set(k,{}); return rows.get(k); };
-  // Performance: colunas fixas (1=Unidade 2=Carteira 3=Tamanho 5/6 fat total, 9/10 fat mat, 13/14 fat rec, 17/18 matrículas)
+  // Performance: colunas fixas (1=Unidade 2=Carteira 3=Tamanho 5/6 fat total, 9/10 fat matrícula, 13/14 fat recebíveis, 17/18 matrículas)
   if(perf)for(let i=1;i<perf.length;i++){
     const c=perf[i], nome=(c[1]||'').trim(); if(!nome)continue;
     if(/^(total|soma|media|média)/i.test(nome))continue;
@@ -1346,6 +1422,8 @@ async function metasFetch(mesKey){
     const o=get(normH(nome));
     o.nome=nome; o.carteira=o.carteira||(c[2]||'').trim(); o.tamanho=o.tamanho||(c[3]||'').trim();
     o.fatAtual=nBR(c[5]); o.fatAnterior=nBR(c[6]);
+    o.fatMat=nBR(c[9]); o.fatMatAnt=nBR(c[10]);
+    o.fatRec=nBR(c[13]); o.fatRecAnt=nBR(c[14]);
     o.matAtual=nBR(c[17]); o.matAnterior=nBR(c[18]);
   }
   // Cebrac (metas/funil): cabeçalho por nome
@@ -1369,6 +1447,8 @@ async function metasFetch(mesKey){
     o.atgFat=(o.metaFat>0&&o.fat!=null)?o.fat/o.metaFat*100:null;
     o.atgMat=(o.metaMat>0&&o.mat!=null)?o.mat/o.metaMat*100:null;
     o.yoy=(o.fatAnterior>0&&o.fatAtual!=null)?(o.fatAtual-o.fatAnterior)/Math.abs(o.fatAnterior)*100:null;
+    o.yoyMat=(o.matAnterior>0&&o.matAtual!=null)?(o.matAtual-o.matAnterior)/Math.abs(o.matAnterior)*100:null;
+    o.projPct=(o.metaFat>0&&o.projFat!=null)?o.projFat/o.metaFat*100:null;
     return o;
   });
   state.metasCache[mesKey]={lista,temCebrac:!!cebrac};
@@ -1377,100 +1457,173 @@ async function metasFetch(mesKey){
 function metasPermitida(o){
   if(!AUTH_ENABLED)return true;
   if(state.perfil.papel==='admin'||(state.perfil.unidades||[]).includes('*'))return true;
-  // 1) casa pelo nome com as unidades visíveis do perfil (gestor e consultor)
   const vis=new Set(Object.values(state.unidades).map(u=>normH(u.nome)));
   if(vis.has(normH(o.nome)))return true;
-  // 2) consultor: casa também pela coluna Carteira da própria planilha
   if(state.perfil.papel==='consultor'&&state.perfil.carteira&&o.carteira&&
      normH(o.carteira)===normH(state.perfil.carteira))return true;
   return false;
 }
+const mPctMeta=v=>(v==null||isNaN(v))?'—':pcts(v);
+const mSign=v=>(v==null||isNaN(v))?'—':(v>=0?'+':'')+pcts(v);
+const mCorMeta=p=>p==null?'var(--t3)':p>=100?'var(--green)':p>=80?'var(--gold-dk)':'var(--dn)';
+let META_ORD={k:'atgFat',d:-1};
+function metasSort(k){ if(META_ORD.k===k)META_ORD.d*=-1; else META_ORD={k,d:-1}; renderMetas(); }
+
 async function renderMetas(){
   let mesKey=$('mMes').value||METAS_MESES[new Date().getMonth()].key;
   let dados;
   try{
     dados=await metasFetch(mesKey);
-    // mês corrente ainda sem dados (início de mês): recua automaticamente até achar
     if(!state.metasMesManual){
-      let ordem=METAS_MESES.find(x=>x.key===mesKey).ordem;
-      let recuou=false;
+      let ordem=METAS_MESES.find(x=>x.key===mesKey).ordem, recuou=false;
       while((!dados||!dados.lista.length)&&ordem>1){
         ordem--; mesKey=METAS_MESES[ordem-1].key; recuou=true;
         try{ dados=await metasFetch(mesKey); }catch(e){ dados={lista:[],temCebrac:false}; }
       }
       if(recuou&&dados.lista.length){ $('mMes').value=mesKey; toast('Metas: '+METAS_MESES[ordem-1].label+' — último mês com dados na planilha.'); }
     }
-  }
-  catch(e){ $('mStatus').textContent='Erro ao ler a planilha: '+e.message; return; }
-  if(!dados||!dados.lista.length){ $('mStatus').textContent='Sem dados na planilha para este mês.'; $('mKpis').innerHTML='';$('mTable').innerHTML='';$('mFunil').innerHTML='';['cRankMeta','cRankYoY','cDntYoY'].forEach(kill); return; }
+  }catch(e){ $('mStatus').textContent='Erro ao ler a planilha: '+e.message; return; }
+  const limpar=()=>{ $('mKpis').innerHTML='';$('mIns').innerHTML='';$('mTable').innerHTML='';$('mFunil').innerHTML='';$('mProj').innerHTML='';
+    ['cRankMeta','cRankYoY','cDntYoY','cDntMeta','cDntOrigem'].forEach(kill); };
+  if(!dados||!dados.lista.length){ $('mStatus').textContent='Sem dados na planilha para este mês.'; limpar(); return; }
+  const mesLbl=METAS_MESES.find(x=>x.key===mesKey).label;
   const permitidas=dados.lista.filter(metasPermitida);
-  const carts=[...new Set(permitidas.map(o=>o.carteira).filter(Boolean))].sort();
-  mselBuild('msMCart','Carteiras',carts,state.f.mc,renderMetas);
+  const uniq=(arr,k)=>[...new Set(arr.map(k).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt'));
+  mselBuild('msMCart','Carteiras',uniq(permitidas,o=>o.carteira),state.f.mc,renderMetas);
+  mselBuild('msMTam','Tamanho',uniq(permitidas,o=>o.tamanho),state.f.mt,renderMetas);
+  mselBuild('msMUni','Unidades',uniq(permitidas,o=>o.nome),state.f.mu,renderMetas);
   const q=($('mBusca').value||'').toLowerCase();
-  const L=permitidas.filter(o=>(!q||o.nome.toLowerCase().includes(q))&&passa(state.f.mc,o.carteira));
+  const L=permitidas.filter(o=>(!q||o.nome.toLowerCase().includes(q))&&passa(state.f.mc,o.carteira)&&passa(state.f.mt,o.tamanho)&&passa(state.f.mu,o.nome));
   const restrito=AUTH_ENABLED&&state.perfil.papel!=='admin'&&!(state.perfil.unidades||[]).includes('*');
-  $('mStatus').textContent=L.length+' unidade(s)'+(restrito?' visíveis para o seu perfil':'')+' · fonte: planilhas ao vivo';
-  const sum=k=>L.reduce((a,o)=>a+(+o[k]||0),0);
-  const tFat=sum('fat'),tMetaFat=sum('metaFat'),tMat=sum('mat'),tMetaMat=sum('metaMat');
-  const tAtu=sum('fatAtual'),tAnt=sum('fatAnterior');
-  const yoyT=tAnt>0?(tAtu-tAnt)/tAnt*100:null;
-  const nUp=L.filter(o=>o.yoy!=null&&o.yoy>1).length,nDn=L.filter(o=>o.yoy!=null&&o.yoy<-1).length;
-  const nNt=L.filter(o=>o.yoy!=null).length-nUp-nDn;
+  $('mStatus').textContent=L.length+' unidade(s)'+(restrito?' visíveis para o seu perfil':'')+' · '+mesLbl+' · planilhas ao vivo';
+  $('mAvisoCebrac').style.display=dados.temCebrac?'none':'block';
+  const S=k=>L.reduce((a,o)=>a+(+o[k]||0),0);
+  const tFat=S('fat'),tMetaFat=S('metaFat'),tMat=S('mat'),tMetaMat=S('metaMat');
+  const tAtu=S('fatAtual'),tAnt=S('fatAnterior'),tMA=S('matAtual'),tMAn=S('matAnterior');
+  const tFM=S('fatMat'),tFR=S('fatRec');
+  const pMeta=tMetaFat>0?tFat/tMetaFat*100:null, pMetaMat=tMetaMat>0?tMat/tMetaMat*100:null;
+  const yoy=tAnt>0?(tAtu-tAnt)/tAnt*100:null, yoyMat=tMAn>0?(tMA-tMAn)/tMAn*100:null;
+  const comMeta=L.filter(o=>o.atgFat!=null), comYoY=L.filter(o=>o.yoy!=null);
+  const nAcima=comMeta.filter(o=>o.atgFat>=100).length, nCresc=comYoY.filter(o=>o.yoy>=0).length;
+
+  /* ── KPIs (os 8 do dash original) ── */
   const kd=[];
   if(dados.temCebrac){
-    kd.push({l:'Faturamento do mês',v:brl(tFat),s:'meta '+brl(tMetaFat),c:'var(--blue)'});
-    kd.push({l:'Atingimento fat.',v:tMetaFat>0?pcts(tFat/tMetaFat*100):'—',c:tFat>=tMetaFat?'var(--green)':'var(--gold-dk)'});
+    kd.push({l:'Faturamento do período',v:brl(tFat),s:'meta '+brl(tMetaFat),c:'var(--blue)'});
+    kd.push({l:'% da meta (fat.)',v:mPctMeta(pMeta),s:nAcima+' de '+comMeta.length+' unidades acima',c:mCorMeta(pMeta)});
     kd.push({l:'Matrículas',v:tMat||'—',s:'meta '+(tMetaMat||'—'),c:'var(--blue-dk)'});
-    kd.push({l:'Atingimento mat.',v:tMetaMat>0?pcts(tMat/tMetaMat*100):'—',c:tMat>=tMetaMat?'var(--green)':'var(--gold-dk)'});
+    kd.push({l:'% da meta (mat.)',v:mPctMeta(pMetaMat),c:mCorMeta(pMetaMat)});
   }
-  kd.push({l:'Fat. total ano atual',v:brl(tAtu),s:'ano anterior '+brl(tAnt),c:'var(--blue)'});
-  kd.push({l:'Crescimento YoY',v:yoyT!=null?(yoyT>=0?'+':'')+pcts(yoyT):'—',c:yoyT>=0?'var(--green)':'var(--dn)'});
-  kd.push({l:'🟢 · 🟡 · 🔴 (YoY)',v:nUp+' · '+nNt+' · '+nDn,c:'var(--green)'});
+  kd.push({l:'Fat. ano atual (acum.)',v:brl(tAtu),s:'vs '+brl(tAnt)+' ano anterior',c:'var(--blue)'});
+  kd.push({l:'Crescimento fat. (YoY)',v:mSign(yoy),s:nCresc+' de '+comYoY.length+' unidades crescendo',c:yoy>=0?'var(--green)':'var(--dn)'});
+  kd.push({l:'Crescimento mat. (YoY)',v:mSign(yoyMat),s:tMA+' vs '+tMAn+' matrículas',c:yoyMat>=0?'var(--green)':'var(--dn)'});
+  kd.push({l:'Unidades',v:L.length,s:'no filtro atual',c:'var(--gold-dk)'});
   $('mKpis').innerHTML=kd.map(k=>`<div class="kpi" style="--kc:${k.c}"><div class="kpi-l">${k.l}</div><div class="kpi-v">${k.v}</div><div class="kpi-s">${k.s||''}</div></div>`).join('');
-  const nomeCurto=n=>n.length>15?n.slice(0,14)+'…':n;
-  // Ranking meta
-  const rm=L.filter(o=>o.atgFat!=null).sort((a,b)=>b.atgFat-a.atgFat);
-  if(rm.length){mk('cRankMeta',{type:'bar',data:{labels:rm.map(o=>nomeCurto(o.nome)),
-    datasets:[{data:rm.map(o=>+o.atgFat.toFixed(1)),backgroundColor:rm.map(o=>o.atgFat>=100?'#4BAF4F':o.atgFat>=80?'#F5C842':'#C0392B'),borderRadius:3}]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>pcts(c.raw)+' da meta'}}},
-      scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:8.5}}}}}});}
-  else kill('cRankMeta');
-  // Ranking YoY
-  const ry=L.filter(o=>o.yoy!=null).sort((a,b)=>b.yoy-a.yoy);
-  if(ry.length){mk('cRankYoY',{type:'bar',data:{labels:ry.map(o=>nomeCurto(o.nome)),
-    datasets:[{data:ry.map(o=>+o.yoy.toFixed(1)),backgroundColor:ry.map(o=>o.yoy>1?'#4BAF4F':o.yoy<-1?'#C0392B':'#C89A00'),borderRadius:3}]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>(c.raw>=0?'+':'')+pcts(c.raw)}}},
-      scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:8.5}}}}}});}
-  else kill('cRankYoY');
-  // Funil
-  const vV=sum('visitas'),vA=sum('agend'),vM=sum('mat');
+
+  /* ── Insights automáticos ── */
+  const spMeta=[...comMeta].sort((a,b)=>b.atgFat-a.atgFat), spYoY=[...comYoY].sort((a,b)=>b.yoy-a.yoy);
+  const tOri=tFM+tFR, pRec=tOri>0?tFR/tOri*100:null;
+  const ins=[];
+  if(comMeta.length)ins.push({i:'🎯',t:nAcima/comMeta.length>=.5?'var(--green)':'var(--gold-dk)',tt:`${nAcima} de ${comMeta.length} unidades bateram a meta`,b:`${pcts(nAcima/comMeta.length*100)} do grupo com 100%+ do faturamento previsto em ${mesLbl}.`});
+  if(spMeta[0])ins.push({i:'🏆',t:'var(--green)',tt:'Melhor % de meta: '+spMeta[0].nome,b:`<b>${pcts(spMeta[0].atgFat)}</b> da meta de faturamento.`});
+  const pior=spMeta[spMeta.length-1];
+  if(pior&&pior.atgFat<80)ins.push({i:'⚠️',t:'var(--dn)',tt:'Atenção: '+pior.nome,b:`Apenas <b>${pcts(pior.atgFat)}</b> da meta — plano de ação recomendado.`});
+  if(comYoY.length)ins.push({i:'📈',t:nCresc>=comYoY.length/2?'var(--green)':'var(--gold-dk)',tt:`${nCresc} de ${comYoY.length} unidades crescendo vs ano anterior`,b:spYoY[0]?`Destaque: <b>${spYoY[0].nome}</b> com ${mSign(spYoY[0].yoy)}.`:''});
+  const quedas=spYoY.filter(o=>o.yoy<-10);
+  if(quedas.length)ins.push({i:'📉',t:'var(--dn)',tt:`${quedas.length} unidade(s) com queda acima de 10%`,b:`<i>${quedas.slice(0,6).map(o=>o.nome).join(', ')}${quedas.length>6?'…':''}</i>`});
+  if(pRec!=null)ins.push({i:'🔍',t:pRec>60?'var(--gold-dk)':'var(--blue)',tt:'Composição do faturamento',b:`<b>${pcts(100-pRec)}</b> matrículas · <b>${pcts(pRec)}</b> recebíveis.${pRec>60?' Concentração em recebíveis — atenção à captação.':''}`});
+  const semMeta=L.filter(o=>o.atgFat==null&&dados.temCebrac).length;
+  if(semMeta)ins.push({i:'📝',t:'var(--t3)',tt:`${semMeta} unidade(s) sem meta cadastrada`,b:'Preencha a meta na planilha Cebrac para entrarem no atingimento.'});
+  $('mIns').innerHTML=ins.length?'<div class="ins-grid">'+ins.map(x=>`<div class="ins" style="--ic:${x.t}"><div class="ins-i">${x.i}</div><div><div class="ins-t">${x.tt}</div><div class="ins-b">${x.b}</div></div></div>`).join('')+'</div>':'';
+
+  /* ── Funil + Projeção vs Meta ── */
+  const vV=S('visitas'),vA=S('agend'),vM=S('mat');
   if(dados.temCebrac&&(vV||vA||vM)){
-    const mx=Math.max(vV,vA,vM,1);
-    const linha=(lbl,val,cor,convDe)=>`<div style="display:grid;grid-template-columns:110px 1fr 120px;align-items:center;gap:10px;margin:9px 0;font-size:12px">
-      <span style="color:var(--t2)">${lbl}</span>
-      <div style="height:22px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:${val/mx*100}%;background:${cor};border-radius:6px"></div></div>
-      <span style="font-weight:700">${(val||0).toLocaleString('pt-BR')}${convDe!=null&&convDe>0?` <span style="color:var(--t3);font-weight:400">(${pcts(val/convDe*100)})</span>`:''}</span></div>`;
-    $('mFunil').innerHTML=linha('Visitas',vV,'#3D5CA8')+linha('Agendamentos',vA,'#C89A00',vV)+linha('Matrículas',vM,'#4BAF4F',vA);
-  } else $('mFunil').innerHTML='<div class="empty-state" style="padding:26px 8px">Funil disponível quando a planilha Cebrac for publicada.</div>';
-  // Donut YoY
-  mk('cDntYoY',{type:'doughnut',data:{labels:['Crescendo','Estável','Em queda'],
-    datasets:[{data:[nUp,nNt,nDn],backgroundColor:['#4BAF4F','#F5C842','#C0392B'],borderColor:'#fff',borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{boxWidth:9}}}}});
-  // Tabela
-  const ord=[...L].sort((a,b)=>(b.atgFat??-1)-(a.atgFat??-1));
-  const cebracCols=dados.temCebrac?'<th class="num">Meta Fat</th><th class="num">Fat</th><th class="num">% Meta</th><th class="num">Meta Mat</th><th class="num">Mat</th><th class="num">% Meta</th>':'';
-  $('mTable').innerHTML='<thead><tr><th>Unidade</th><th>Carteira</th>'+cebracCols+
-    '<th class="num">Fat ano ant.</th><th class="num">Fat ano atual</th><th class="num">Var YoY</th></tr></thead><tbody>'+
-    ord.map(o=>{
-      const cc=dados.temCebrac?`<td class="num">${brl(o.metaFat)}</td><td class="num">${brl(o.fat)}</td>
-        <td class="num">${o.atgFat!=null?`<span class="pill ${o.atgFat>=100?'up':o.atgFat>=80?'nt':'dn'}">${pcts(o.atgFat)}</span>`:'—'}</td>
-        <td class="num">${o.metaMat??'—'}</td><td class="num">${o.mat??'—'}</td>
-        <td class="num">${o.atgMat!=null?`<span class="pill ${o.atgMat>=100?'up':o.atgMat>=80?'nt':'dn'}">${pcts(o.atgMat)}</span>`:'—'}</td>`:'';
-      return`<tr><td><b>${o.nome}</b><div class="usub">${o.tamanho||''}</div></td><td>${o.carteira||'—'}</td>${cc}
-        <td class="num">${brl(o.fatAnterior)}</td><td class="num">${brl(o.fatAtual)}</td>
-        <td class="num">${o.yoy!=null?`<span class="pill ${o.yoy>1?'up':o.yoy<-1?'dn':'nt'}">${(o.yoy>=0?'+':'')+pcts(o.yoy)}</span>`:'—'}</td></tr>`;
-    }).join('')+'</tbody>';
+    const c1=vV>0?vA/vV*100:null,c2=vA>0?vM/vA*100:null;
+    const step=(v,l)=>`<div class="fun-step"><div class="fun-v">${(v||0).toLocaleString('pt-BR')}</div><div class="fun-l">${l}</div></div>`;
+    const arr=c=>`<div class="fun-arrow">→<div class="fun-conv">${c==null?'—':pcts(c)}</div></div>`;
+    $('mFunil').innerHTML='<div class="funil">'+step(vV,'Visitas')+arr(c1)+step(vA,'Agendamentos')+arr(c2)+step(vM,'Matrículas')+'</div>';
+  } else $('mFunil').innerHTML='<div class="empty-state" style="padding:22px 8px">Funil disponível quando a planilha Cebrac estiver publicada.</div>';
+  const tPF=S('projFat'),tPM=S('projMat');
+  if(dados.temCebrac&&(tPF||tPM)){
+    const bar=(label,proj,meta,fmt)=>{const p=meta>0?proj/meta*100:null;const cor=mCorMeta(p);
+      return `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px"><span>${label}</span><span><b>${fmt(proj)}</b> / meta ${fmt(meta)} · <b style="color:${cor}">${mPctMeta(p)}</b></span></div>
+        <div style="height:10px;background:var(--bg);border-radius:5px;overflow:hidden"><div style="height:100%;width:${p==null?0:Math.min(p,100)}%;background:${cor};border-radius:5px"></div></div></div>`;};
+    $('mProj').innerHTML=bar('Projeção de faturamento',tPF,tMetaFat,brl)+bar('Projeção de matrículas',tPM,tMetaMat,v=>(v||0).toLocaleString('pt-BR'));
+  } else $('mProj').innerHTML='<div class="empty-state" style="padding:22px 8px">Projeção disponível com a planilha Cebrac.</div>';
+
+  /* ── Donuts ── */
+  const dn=(id,labels,data,cores)=>mk(id,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:cores,borderColor:'#fff',borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{boxWidth:9,font:{size:10}}}}}});
+  if(comMeta.length)dn('cDntMeta',['≥100%','80–99%','<80%'],[nAcima,comMeta.filter(o=>o.atgFat>=80&&o.atgFat<100).length,comMeta.filter(o=>o.atgFat<80).length],['#4BAF4F','#F5C842','#C0392B']); else kill('cDntMeta');
+  if(tOri>0)dn('cDntOrigem',['Fat. matrícula','Fat. recebíveis'],[tFM,tFR],['#3D5CA8','#F5C842']); else kill('cDntOrigem');
+  const nUp=comYoY.filter(o=>o.yoy>1).length,nDn=comYoY.filter(o=>o.yoy<-1).length;
+  dn('cDntYoY',['Crescendo','Estável','Em queda'],[nUp,comYoY.length-nUp-nDn,nDn],['#4BAF4F','#F5C842','#C0392B']);
+
+  /* ── Rankings top 10 ── */
+  const nomeCurto=n=>n.length>16?n.slice(0,15)+'…':n;
+  const hb=(id,arr,val,cor,fmt)=>{ if(!arr.length){kill(id);return;}
+    mk(id,{type:'bar',data:{labels:arr.map(o=>nomeCurto(o.nome)),datasets:[{data:arr.map(o=>+val(o).toFixed(1)),backgroundColor:arr.map(cor),borderRadius:3}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length)abrirMetasUnidade(arr[els[0].index].nome)},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.raw)}}},
+        scales:{x:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:9}}}}}}); };
+  hb('cRankMeta',spMeta.slice(0,10),o=>o.atgFat,o=>mCorMeta(o.atgFat)==='var(--green)'?'#4BAF4F':o.atgFat>=80?'#F5C842':'#C0392B',v=>pcts(v)+' da meta');
+  hb('cRankYoY',spYoY.slice(0,10),o=>o.yoy,o=>o.yoy>1?'#4BAF4F':o.yoy<-1?'#C0392B':'#C89A00',v=>mSign(v));
+
+  /* ── Tabela ordenável ── */
+  const cols=[{k:'nome',l:'Unidade'},{k:'carteira',l:'Carteira'}]
+    .concat(dados.temCebrac?[{k:'metaFat',l:'Meta fat',n:1},{k:'fat',l:'Fat',n:1},{k:'atgFat',l:'% meta',n:1},{k:'metaMat',l:'Meta mat',n:1},{k:'mat',l:'Mat',n:1},{k:'atgMat',l:'% meta',n:1},{k:'projPct',l:'Proj. %',n:1}]:[])
+    .concat([{k:'fatAnterior',l:'Fat ano ant.',n:1},{k:'fatAtual',l:'Fat ano atual',n:1},{k:'yoy',l:'Var YoY',n:1},{k:'yoyMat',l:'Mat YoY',n:1}]);
+  const ord=[...L].sort((a,b)=>{const va=a[META_ORD.k],vb=b[META_ORD.k];
+    if(va==null&&vb==null)return 0; if(va==null)return 1; if(vb==null)return -1;
+    return (typeof va==='string'?va.localeCompare(vb,'pt'):va-vb)*META_ORD.d;});
+  const pill=(v,ok,warn)=>v==null?'—':`<span class="pill ${ok(v)?'up':warn(v)?'nt':'dn'}">${v>=0&&!ok(v)&&!warn(v)&&false?'':''}${pcts(v)}</span>`;
+  $('mTable').innerHTML='<thead><tr>'+cols.map(c=>`<th class="${c.n?'num':''}" style="cursor:pointer" onclick="metasSort('${c.k}')">${c.l}${META_ORD.k===c.k?(META_ORD.d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr></thead><tbody>'+
+    ord.map(o=>`<tr style="cursor:pointer" onclick="abrirMetasUnidade('${o.nome.replace(/'/g,"\\'")}')"><td><b>${o.nome}</b><div class="usub">${o.tamanho||''}</div></td><td>${o.carteira||'—'}</td>`+
+      (dados.temCebrac?`<td class="num">${brl(o.metaFat)}</td><td class="num">${brl(o.fat)}</td><td class="num">${o.atgFat!=null?`<span class="pill ${o.atgFat>=100?'up':o.atgFat>=80?'nt':'dn'}">${pcts(o.atgFat)}</span>`:'—'}</td>
+        <td class="num">${o.metaMat??'—'}</td><td class="num">${o.mat??'—'}</td><td class="num">${o.atgMat!=null?`<span class="pill ${o.atgMat>=100?'up':o.atgMat>=80?'nt':'dn'}">${pcts(o.atgMat)}</span>`:'—'}</td>
+        <td class="num">${o.projPct!=null?`<span class="pill ${o.projPct>=100?'up':o.projPct>=80?'nt':'dn'}">${pcts(o.projPct)}</span>`:'—'}</td>`:'')+
+      `<td class="num">${brl(o.fatAnterior)}</td><td class="num">${brl(o.fatAtual)}</td>
+       <td class="num">${o.yoy!=null?`<span class="pill ${o.yoy>1?'up':o.yoy<-1?'dn':'nt'}">${mSign(o.yoy)}</span>`:'—'}</td>
+       <td class="num">${o.yoyMat!=null?`<span class="pill ${o.yoyMat>1?'up':o.yoyMat<-1?'dn':'nt'}">${mSign(o.yoyMat)}</span>`:'—'}</td></tr>`).join('')+'</tbody>';
 }
+
+/* ── Modal da unidade: tendência mensal (atual × ano anterior), como no dash ── */
+let MDL_METRIC='fat';
+async function abrirMetasUnidade(nome){
+  $('mdlTitulo').textContent=nome;
+  $('mdl').classList.add('open');
+  $('mdlBody').innerHTML='<div class="state" style="min-height:200px"><div class="spinn"></div><div class="st-t">Carregando série mensal…</div></div>';
+  const mesSel=METAS_MESES.find(x=>x.key===$('mMes').value)||METAS_MESES[new Date().getMonth()];
+  const meses=METAS_MESES.filter(m=>m.ordem<=mesSel.ordem);
+  const dados=await Promise.all(meses.map(m=>metasFetch(m.key).catch(()=>({lista:[]}))));
+  const serie=meses.map((m,i)=>{const o=dados[i].lista.find(x=>normH(x.nome)===normH(nome));return {m,o};});
+  const ultimo=[...serie].reverse().find(x=>x.o)?.o;
+  if(!ultimo){$('mdlBody').innerHTML='<div class="empty-state">Sem dados para esta unidade.</div>';return;}
+  const k=[{l:'Fat. ano atual (acum.)',v:brl(ultimo.fatAtual),s:'vs '+brl(ultimo.fatAnterior)},{l:'Crescimento YoY',v:mSign(ultimo.yoy),c:ultimo.yoy>=0?'var(--green)':'var(--dn)'},
+    {l:'Matrículas ano',v:ultimo.matAtual??'—',s:'vs '+(ultimo.matAnterior??'—')}];
+  if(ultimo.atgFat!=null)k.unshift({l:'% da meta (fat.)',v:pcts(ultimo.atgFat),s:brl(ultimo.fat)+' / '+brl(ultimo.metaFat),c:mCorMeta(ultimo.atgFat)});
+  $('mdlBody').innerHTML='<div class="kpi-grid">'+k.map(x=>`<div class="kpi" style="--kc:${x.c||'var(--blue)'}"><div class="kpi-l">${x.l}</div><div class="kpi-v">${x.v}</div><div class="kpi-s">${x.s||''}</div></div>`).join('')+'</div>'
+    +'<div class="filters" style="margin:4px 0 6px"><span class="cnt">Tendência mensal:</span>'
+    +[['fat','Faturamento (mês)'],['mat','Matrículas (mês)'],['fatAcum','Fat. acumulado no ano'],['meta','Meta × realizado']].map(([kk,l])=>`<button class="btn ghost ${MDL_METRIC===kk?'gold':''}" onclick="MDL_METRIC='${kk}';abrirMetasUnidade('${nome.replace(/'/g,"\\'")}')">${l}</button>`).join('')+'</div>'
+    +'<div class="chart-box tall"><canvas id="mdlChart"></canvas></div>'
+    +'<div class="hint" style="margin-top:6px">A série "mês" é derivada da diferença entre acumulados consecutivos da planilha Performance; "acumulado" é o valor direto da planilha.</div>';
+  // séries: acumulado direto; mensal = diferença entre acumulados
+  const acum=(kk)=>serie.map(x=>x.o?(+x.o[kk]||0):null);
+  const mensal=(arr)=>arr.map((v,i)=>v==null?null:(i===0||arr[i-1]==null?v:v-arr[i-1]));
+  let a,b,la,lb,money=true;
+  if(MDL_METRIC==='fat'){a=mensal(acum('fatAtual'));b=mensal(acum('fatAnterior'));la='Ano atual';lb='Ano anterior';}
+  else if(MDL_METRIC==='mat'){a=mensal(acum('matAtual'));b=mensal(acum('matAnterior'));la='Ano atual';lb='Ano anterior';money=false;}
+  else if(MDL_METRIC==='fatAcum'){a=acum('fatAtual');b=acum('fatAnterior');la='Acumulado atual';lb='Acumulado anterior';}
+  else {a=serie.map(x=>x.o?(+x.o.fat||null):null);b=serie.map(x=>x.o?(+x.o.metaFat||null):null);la='Realizado';lb='Meta';}
+  mk('mdlChart',{type:'line',data:{labels:meses.map(m=>m.label.slice(0,3)),datasets:[
+    {label:la,data:a,borderColor:'#2E4585',backgroundColor:'rgba(46,69,133,.12)',fill:true,tension:.3,pointRadius:3.5,borderWidth:2.5,spanGaps:true},
+    {label:lb,data:b,borderColor:'rgba(46,69,133,.55)',borderDash:[5,4],tension:.3,pointRadius:2.5,borderWidth:2,spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top',align:'end',labels:{boxWidth:9,usePointStyle:true,pointStyle:'circle'}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+(c.raw==null?'—':money?brl(c.raw):c.raw)}}},
+      scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(0,0,0,.05)'},ticks:{callback:v=>money?shr(v):v}}}}});
+}
+function fecharMdl(e){ if(!e||e.target.id==='mdl'||e.target.classList.contains('mdl-x')){$('mdl').classList.remove('open');kill('mdlChart');} }
 
 /* ── Popup de média da rede (DRE): mouse ou clique ── */
 (function(){
