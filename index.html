@@ -478,7 +478,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.7 · login ativo";
+const VERSAO = "v3.7.1 · metas por perfil";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -1376,20 +1376,26 @@ async function metasFetch(mesKey){
 function metasPermitida(o){
   if(!AUTH_ENABLED)return true;
   if(state.perfil.papel==='admin'||(state.perfil.unidades||[]).includes('*'))return true;
-  // gestor e consultor: unidades já filtradas em state.unidades
-  const vis=new Set(Object.keys(state.unidades).map(id=>id.replace(/-/g,'')));
-  return vis.has(normH(o.nome));
+  // 1) casa pelo nome com as unidades visíveis do perfil (gestor e consultor)
+  const vis=new Set(Object.values(state.unidades).map(u=>normH(u.nome)));
+  if(vis.has(normH(o.nome)))return true;
+  // 2) consultor: casa também pela coluna Carteira da própria planilha
+  if(state.perfil.papel==='consultor'&&state.perfil.carteira&&o.carteira&&
+     normH(o.carteira)===normH(state.perfil.carteira))return true;
+  return false;
 }
 async function renderMetas(){
   const mesKey=$('mMes').value||METAS_MESES[new Date().getMonth()].key;
   let dados;
   try{ dados=await metasFetch(mesKey); }
   catch(e){ $('mStatus').textContent='Erro ao ler a planilha: '+e.message; return; }
-  const carts=[...new Set(dados.lista.map(o=>o.carteira).filter(Boolean))].sort();
+  const permitidas=dados.lista.filter(metasPermitida);
+  const carts=[...new Set(permitidas.map(o=>o.carteira).filter(Boolean))].sort();
   mselBuild('msMCart','Carteiras',carts,state.f.mc,renderMetas);
   const q=($('mBusca').value||'').toLowerCase();
-  const L=dados.lista.filter(o=>metasPermitida(o)&&(!q||o.nome.toLowerCase().includes(q))&&passa(state.f.mc,o.carteira));
-  $('mStatus').textContent=L.length+' unidade(s) · fonte: planilhas ao vivo';
+  const L=permitidas.filter(o=>(!q||o.nome.toLowerCase().includes(q))&&passa(state.f.mc,o.carteira));
+  const restrito=AUTH_ENABLED&&state.perfil.papel!=='admin'&&!(state.perfil.unidades||[]).includes('*');
+  $('mStatus').textContent=L.length+' unidade(s)'+(restrito?' visíveis para o seu perfil':'')+' · fonte: planilhas ao vivo';
   const sum=k=>L.reduce((a,o)=>a+(+o[k]||0),0);
   const tFat=sum('fat'),tMetaFat=sum('metaFat'),tMat=sum('mat'),tMetaMat=sum('metaMat');
   const tAtu=sum('fatAtual'),tAnt=sum('fatAnterior');
