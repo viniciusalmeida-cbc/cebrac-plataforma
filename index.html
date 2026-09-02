@@ -108,6 +108,10 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 .state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:280px;gap:11px;text-align:center}
 .spinn{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:rot .7s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+:focus-visible{outline:3px solid var(--gold-dk);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+button:disabled,input:disabled,select:disabled,textarea:disabled{cursor:not-allowed;opacity:.6}
 .st-t{font-size:14px;font-weight:700}
 .st-b{font-size:11.5px;color:var(--t2);max-width:480px;line-height:1.6}
 .msel{position:relative;display:inline-block}
@@ -166,16 +170,18 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <span id="loginLogo"></span>
     <h1>Saúde Financeira das Unidades</h1>
     <p>Plataforma de fechamento e acompanhamento · Rede Cebrac</p>
-    <div class="err" id="loginErr"></div>
+    <div class="err" id="loginErr" role="alert" aria-live="assertive"></div>
     <button class="gbtn" onclick="loginGoogle()">
       <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 40.4 44 36 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
       Entrar com a conta Google
     </button>
     <div class="divider">ou e-mail e senha</div>
-    <input type="email" id="loginEmail" placeholder="e-mail">
-    <input type="password" id="loginPass" placeholder="senha">
+    <label class="sr-only" for="loginEmail">E-mail</label>
+    <input type="email" id="loginEmail" placeholder="e-mail" autocomplete="email" aria-describedby="loginHint">
+    <label class="sr-only" for="loginPass">Senha</label>
+    <input type="password" id="loginPass" placeholder="senha" autocomplete="current-password" aria-describedby="loginHint">
     <button class="btn" onclick="loginEmail()">Entrar</button>
-    <p class="hint" style="margin-top:14px">Acesso liberado pelo administrador da plataforma.</p>
+    <p class="hint" id="loginHint" style="margin-top:14px">Acesso liberado pelo administrador da plataforma.</p>
   </div>
 </div>
 
@@ -222,6 +228,20 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
         <div class="kpi-grid" id="pMetasKpis" style="margin:0"></div></div>
     </div>
   </div>
+  <section class="panel" id="actionCenter" aria-labelledby="actionCenterTitle">
+    <div class="panel-t" id="actionCenterTitle">Plano de ação da unidade</div>
+    <div class="panel-s">Transforme um diagnóstico em compromisso acompanhado pela consultoria e pelo franqueado.</div>
+    <div class="form-grid">
+      <div class="fi"><label for="actUnit">Unidade</label><select id="actUnit" aria-describedby="actHelp"></select></div>
+      <div class="fi"><label for="actType">Prioridade</label><select id="actType"><option value="financeiro">Resultado e custos</option><option value="cobranca">Inadimplência e cobrança</option><option value="comercial">Vendas e conversão</option><option value="equipe">Gestão da equipe</option><option value="dados">Qualidade do fechamento</option></select></div>
+      <div class="fi"><label for="actOwner">Responsável</label><input id="actOwner" type="text" placeholder="Nome do responsável" autocomplete="name"></div>
+      <div class="fi"><label for="actDue">Prazo</label><input id="actDue" type="date"></div>
+    </div>
+    <div class="fi" style="margin-top:10px"><label for="actText">Ação combinada</label><textarea id="actText" rows="3" placeholder="Descreva a ação, o indicador de sucesso e a evidência esperada."></textarea></div>
+    <div id="actHelp" class="hint" style="margin-top:6px">As ações ficam salvas neste navegador nesta primeira versão. Para uso colaborativo, persistir a coleção no Firestore com regras de acesso e histórico.</div>
+    <div class="btn-row"><button class="btn" type="button" onclick="salvarPlanoAcao()">Registrar ação</button><button class="btn ghost" type="button" onclick="limparPlanosAcao()">Limpar ações locais</button><span class="cnt" id="actStatus" role="status" aria-live="polite"></span></div>
+    <div id="actList" style="margin-top:12px"></div>
+  </section>
 </div>
 
 <div class="view" id="view-rede">
@@ -377,7 +397,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
     <span class="cnt">Painel de acompanhamento de alunos (módulo independente — carregue o CSV de alunos dentro dele).</span>
     <a class="btn ghost" href="painel_rede.html" target="_blank" style="text-decoration:none">Abrir em tela cheia ↗</a>
   </div>
-  <iframe src="painel_rede.html" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
+  <iframe title="Painel de acompanhamento de alunos" loading="lazy" src="painel_rede.html" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--border);border-radius:var(--r);background:#fff"></iframe>
 </div>
 
 <!-- ══════ METAS & CRESCIMENTO ══════ -->
@@ -413,8 +433,8 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 </div>
 
 <!-- modal de unidade (Metas) -->
-<div class="mdl-ov" id="mdl" onclick="fecharMdl(event)">
-  <div class="mdl"><div class="mdl-hd"><div class="mdl-t" id="mdlTitulo"></div><button class="mdl-x btn ghost" onclick="fecharMdl()">✕</button></div>
+<div class="mdl-ov" id="mdl" role="dialog" aria-modal="true" aria-labelledby="mdlTitulo" aria-describedby="mdlBody" onclick="fecharMdl(event)">
+  <div class="mdl"><div class="mdl-hd"><div class="mdl-t" id="mdlTitulo"></div><button class="mdl-x btn ghost" type="button" aria-label="Fechar detalhes da unidade" onclick="fecharMdl()">Fechar</button></div>
   <div class="mdl-bd" id="mdlBody"></div></div>
 </div>
 
@@ -491,7 +511,7 @@ table.dt tr.tot td{background:var(--blue-lt);font-weight:700;border-top:2px soli
 </div>
 
 </div><!-- /appView -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div class="dretip" id="dretip"></div>
 
 <script>
@@ -705,7 +725,7 @@ async function carregarTudo(){
 function initUI(){
   const uids=Object.keys(state.unidades).sort((a,b)=>state.unidades[a].nome.localeCompare(state.unidades[b].nome));
   const opts=uids.map(id=>`<option value="${id}">${state.unidades[id].nome}</option>`).join('');
-  $('dreUnit').innerHTML=opts; $('fecUnit').innerHTML=opts;
+  $('dreUnit').innerHTML=opts; $('fecUnit').innerHTML=opts; $('actUnit').innerHTML=opts; renderActionCenter();
   // meses disponíveis
   const meses=[...new Set(Object.values(state.fech).map(f=>f.mes))].sort();
   const anos=[...new Set(meses.map(m=>m.slice(0,4)))].sort().reverse();
@@ -1076,7 +1096,7 @@ function renderComparativo(){
    FECHAMENTO MENSAL
 ================================================================ */
 function buildDespGrid(){
-  $('despGrid').innerHTML=CATEGORIAS.map((c,i)=>`<div class="fi"><label>${c}</label><input type="number" step="0.01" id="d_${i}" oninput="calcFechamento()"></div>`).join('');
+  $('despGrid').innerHTML=CATEGORIAS.map((c,i)=>`<div class="fi"><label for="d_${i}">${c}</label><input type="number" step="0.01" min="0" id="d_${i}" oninput="calcFechamento()" inputmode="decimal"></div>`).join('');
 }
 function calcFechamento(){
   const rp=+$('f_receitaParcelas').value||0, rc=+$('f_receitaComercial').value||0;
@@ -2102,6 +2122,37 @@ async function admRemoverUsuario(email){
   try{ await db.collection('usuarios').doc(email).delete(); toast('Acesso removido.'); renderAdmin(); }
   catch(e){toast('Erro: '+e.message);}
 }
+
+/* ================================================================
+   PLANO DE AÇÃO — camada inicial de execução gerencial
+   Nesta versão os registros ficam no navegador. Em produção, migrar
+   para Firestore com regras por unidade, histórico e aprovação.
+================================================================ */
+const ACTION_KEY='cebrac.planos.v1';
+function actionEsc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
+function actionRead(){try{return JSON.parse(localStorage.getItem(ACTION_KEY)||'[]')}catch(e){return[]}}
+function actionWrite(items){try{localStorage.setItem(ACTION_KEY,JSON.stringify(items));return true}catch(e){return false}}
+function actionLabel(t){return {financeiro:'Resultado e custos',cobranca:'Inadimplência e cobrança',comercial:'Vendas e conversão',equipe:'Gestão da equipe',dados:'Qualidade do fechamento'}[t]||t}
+function renderActionCenter(){
+  const unit=$('actUnit'); if(!unit)return;
+  const items=actionRead();
+  const visible=items.filter(x=>!unit.value||x.unidadeId===unit.value);
+  $('actList').innerHTML=visible.length?visible.map(x=>`<article class="panel" style="margin:8px 0;padding:11px 13px" data-action-id="${actionEsc(x.id)}"><div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><b>${actionEsc(actionLabel(x.tipo))}</b><div class="hint">${actionEsc(x.unidadeNome)} · responsável: ${actionEsc(x.responsavel||'não definido')} · prazo: ${actionEsc(x.prazo||'não definido')}</div></div><span class="pill ${x.status==='concluida'?'up':'nt'}">${x.status==='concluida'?'Concluída':'Em aberto'}</span></div><p style="margin-top:7px;font-size:11.5px;line-height:1.5">${actionEsc(x.acao)}</p><div class="btn-row"><button class="btn ghost" type="button" onclick="alternarPlanoAcao('${actionEsc(x.id)}')">${x.status==='concluida'?'Reabrir':'Concluir'}</button><button class="btn ghost" type="button" onclick="removerPlanoAcao('${actionEsc(x.id)}')">Excluir</button></div></article>`).join(''):'<div class="empty-state" style="padding:18px">Nenhuma ação registrada para esta unidade.</div>';
+  $('actStatus').textContent=visible.length+' ação(ões) no ciclo atual';
+}
+function salvarPlanoAcao(){
+  const unidadeId=$('actUnit').value, acao=$('actText').value.trim();
+  if(!unidadeId){toast('Selecione a unidade para registrar a ação.');$('actUnit').focus();return;}
+  if(acao.length<10){toast('Descreva uma ação com pelo menos 10 caracteres.');$('actText').focus();return;}
+  const u=state.unidades[unidadeId]; const items=actionRead();
+  items.unshift({id:'a_'+Date.now().toString(36),unidadeId,unidadeNome:u?.nome||unidadeId,tipo:$('actType').value,responsavel:$('actOwner').value.trim(),prazo:$('actDue').value,acao,status:'aberta',criadoEm:new Date().toISOString(),criadoPor:state.user?.email||'local'});
+  if(!actionWrite(items)){toast('Não foi possível salvar no navegador.');return;}
+  $('actText').value='';$('actOwner').value='';$('actDue').value='';toast('Ação registrada para acompanhamento.');renderActionCenter();
+}
+function alternarPlanoAcao(id){const items=actionRead();const x=items.find(a=>a.id===id);if(!x)return;x.status=x.status==='concluida'?'aberta':'concluida';x.atualizadoEm=new Date().toISOString();actionWrite(items);renderActionCenter();}
+function removerPlanoAcao(id){if(!confirm('Excluir esta ação local?'))return;actionWrite(actionRead().filter(a=>a.id!==id));renderActionCenter();}
+function limparPlanosAcao(){if(!confirm('Limpar todas as ações salvas neste navegador?'))return;localStorage.removeItem(ACTION_KEY);renderActionCenter();toast('Ações locais removidas.');}
+$('actUnit')?.addEventListener('change',renderActionCenter);
 
 /* ================================================================ */
 function goTab(v){
