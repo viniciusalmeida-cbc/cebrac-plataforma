@@ -478,7 +478,7 @@ const firebaseConfig = {
   measurementId: "G-B02ECJZYPE"
 };
 const TITULO = "Rede Cebrac";
-const VERSAO = "v3.5 · comercial com menu lateral";
+const VERSAO = "v3.6 · comercial em 2º plano";
 
 /* Login: false = acesso aberto (fase inicial de visualização);
    true  = exige login Google/e-mail e aplica permissões por unidade.
@@ -697,6 +697,7 @@ function initUI(){
   $('redeLoad').style.display='none'; $('redeContent').style.display='block';
   $('painelLoad').style.display='none'; $('painelContent').style.display='block';
   renderPainel(); renderRede(); renderChips(); carregarFechamento();
+  comPreload();   // ★ base comercial baixa em segundo plano enquanto o usuário navega
   if(state.perfil.papel==='admin') renderAdmin();
 }
 
@@ -1583,7 +1584,12 @@ function comValida(r){
 }
 function comPerda(r){const st=comNrm(r.status);return COM_PERDA.some(p=>st.includes(comNrm(p)));}
 
-async function comLoad(){
+function comLoad(){
+  if(COM._p)return COM._p;          // já carregando/carregado: reaproveita
+  COM._p=comLoadReal();
+  return COM._p;
+}
+async function comLoadReal(){
   if(COM.rows)return COM.rows;
   const anos=Object.keys(COM_CFG.anos);
   let prontos=0;
@@ -1628,6 +1634,18 @@ async function comLoad(){
   }
   COM.rows=rows;
   return rows;
+}
+let COM_PRELOADED=false;
+function comPreload(){
+  if(COM_PRELOADED)return; COM_PRELOADED=true;
+  const sub=$('barSub'), antes=sub.textContent;
+  sub.textContent=antes+' · carregando base comercial…';
+  comLoad().then(rows=>{
+    sub.textContent=sub.textContent.replace(' · carregando base comercial…','')+' · comercial pronto ('+rows.length.toLocaleString('pt-BR')+' registros)';
+    setTimeout(()=>{sub.textContent=sub.textContent.replace(/ · comercial pronto[^·]*$/,'');},6000);
+    // se o usuário já estiver na aba Comercial esperando, renderiza
+    if(document.querySelector('#view-comercial.active')&&!COM_INIT){COM_INIT=true;$('comLoad').style.display='none';$('comContent').style.display='block';renderComercial();}
+  }).catch(e=>{ sub.textContent=sub.textContent.replace(' · carregando base comercial…',''); console.warn('preload comercial',e); });
 }
 let COM_INIT=false;
 async function initComercial(){
